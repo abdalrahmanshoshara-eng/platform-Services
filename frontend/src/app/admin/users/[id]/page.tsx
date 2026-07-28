@@ -23,7 +23,7 @@ export default function AdminUserDetailPage() {
   const [reason, setReason] = useState('');
   const [duration, setDuration] = useState<DurationMode>('5');
   const [startsAt, setStartsAt] = useState(localInput(new Date()));
-  const [expiresAt, setExpiresAt] = useState(localInput(new Date(Date.now() + 5 * 86400000)));
+  const [expiresAt, setExpiresAt] = useState(() => localInput(new Date(Date.now() + 5 * 86400000)));
   const [disableOpen, setDisableOpen] = useState(false);
   const [disableReason, setDisableReason] = useState('');
   const [error, setError] = useState('');

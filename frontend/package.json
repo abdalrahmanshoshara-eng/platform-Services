@@ -6,8 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:headers": "node scripts/security-headers-self-test.mjs",
     "test:excel": "node scripts/excel-contacts-self-test.mjs"
   },
   "dependencies": {
@@ -23,6 +25,8 @@
     "@types/node": "24.10.2",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.2.10",
     "typescript": "^5.9.0",
     "vitest": "^3.2.7"
   }

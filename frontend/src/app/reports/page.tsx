@@ -5,8 +5,9 @@ import { useEffect, useState } from 'react';
 import DownloadButton from '@/components/DownloadButton';
 import PageHero from '@/components/PageHero';
 import StatusBadge from '@/components/StatusBadge';
-import { GeneratedReport, PaginatedResponse, fetchApi } from '@/lib/api';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { apiFetch as fetchApi } from '@/shared/api/client';
+import type { GeneratedReport, PaginatedResponse } from '@/shared/api/types';
+import { useRequireAuth } from '@/shared/auth/useRequireAuth';
 
 export default function ReportsPage() {
   const ready = useRequireAuth();
