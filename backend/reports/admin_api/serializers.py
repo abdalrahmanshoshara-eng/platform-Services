@@ -7,6 +7,7 @@ from reports.catalog.validation import validate_fields_schema
 from reports.models import (
     AuditEvent,
     GeneratedReport,
+    ReportTemplateVersion,
     ReportType,
     Service,
 )
@@ -159,6 +160,7 @@ class AdminReportTypeSerializer(serializers.ModelSerializer):
             "id", "name", "slug", "description", "template_file", "fields_schema",
             "is_active", "versions_count", "reports_count", "created_at", "updated_at",
         ]
+        read_only_fields = ["template_file", "versions_count", "reports_count", "created_at", "updated_at"]
 
     def validate(self, attrs):
         # The backend is the single source of truth for schema validity; reject
@@ -168,3 +170,29 @@ class AdminReportTypeSerializer(serializers.ModelSerializer):
         if "fields_schema" in attrs:
             validate_fields_schema(attrs["fields_schema"])
         return attrs
+
+
+class AdminTemplateVersionSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source="created_by.username", read_only=True)
+    has_reports = serializers.BooleanField(source="_has_reports", read_only=True)
+
+    class Meta:
+        model = ReportTemplateVersion
+        fields = [
+            "id",
+            "report_type",
+            "version",
+            "fields_schema",
+            "checksum",
+            "status",
+            "created_by",
+            "created_by_name",
+            "created_at",
+            "activated_at",
+            "has_reports",
+        ]
+        read_only_fields = fields
+
+
+class TemplateVersionUploadSerializer(serializers.Serializer):
+    template_file = serializers.FileField(write_only=True)

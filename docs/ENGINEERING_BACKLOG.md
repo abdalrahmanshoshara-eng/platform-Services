@@ -12,7 +12,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B3 | P1 · **RESOLVED 2026-07-28** | Security/Config | ✅ Fixed. `DEBUG` now defaults to `False` (fail-closed); a guard refuses to boot with the shared dev `SECRET_KEY` when `DEBUG` is off; and with `DEBUG` off, HTTPS redirect + HSTS + nosniff + referrer-policy + Secure cookies turn on automatically (all env-overridable). `.env.example` gained a production checklist. | `config/settings.py:19-24,182-195`; `.env.example` | A prod deploy that forgot to flip `DEBUG` served non-Secure cookies + tracebacks | Done — see "B3 — Resolution" below | — |
 | B4 | P1 · **RESOLVED 2026-07-28** | Architecture/Admin | ✅ Fixed for Service (the real gap). Was: generic `PATCH` on the admin Service viewset and `list_editable`/editable fields in Django `admin.py` flipped `is_active`/`status` directly, skipping the audited `activate`/`deactivate` actions. `Service.is_active` is now read-only on the API serializer and locked in Django admin; template `status` is locked in Django admin. ReportType toggling was already audited via `perform_update` (no metadata loss) — left as-is. | `admin_api/serializers.py:81-101`; `admin.py:29-34,54-60`; ReportType path `admin_api/views.py:300-308` already audits | Services/templates could be disabled with no audit trail or `disabled_by/at` metadata | Done — see "B4 — Resolution" below | — |
 | B5 | P1 · **RESOLVED 2026-07-28** | Architecture/Validation | ✅ Fixed. `AdminReportTypeSerializer.validate()` now runs `validate_fields_schema` on create/PATCH, so malformed schemas (dup names, `select` without `options`, bad type, non-list) are rejected with `400 INVALID_FIELDS_SCHEMA` instead of being persisted. | `admin_api/serializers.py` `AdminReportTypeSerializer`; `catalog/validation.py` | Invalid schemas used to persist and break the user form/generation | Done — see "B5 — Resolution" below | B6 |
-| B6 | P1 | Architecture/Dead code | Template-version lifecycle (`ReportTemplateVersion`, `ActivateTemplateVersionUseCase`) and DOCX security scanner (`catalog/security.py`) are unreachable via any API — only unit-tested. Admin "report templates" needs cannot be met. | No viewset/URL in `reports/urls.py` or `admin_api/urls.py`; callers only in tests/migrations | Documented template management + upload-security features effectively don't exist at runtime | Expose versioning + template upload through `admin_api` (draft→validate→activate) wired to the scanner, or explicitly descope | B5 |
+| B6 | P1 · **RESOLVED 2026-07-28** | Architecture/Security | ✅ Fixed. Template versions now have admin-only upload/list/detail and audited validate/activate/deactivate/archive actions. Uploads use randomized storage keys and bounded DOCX scanning; activation is transactional and DB-constrained to one active version; generation requires and preserves the active validated snapshot. | `catalog/{application,security}.py`; `services/template_storage.py`; `admin_api/{views,serializers,urls}.py`; migration `0010`; Admin UI | Runtime template management and upload security are now enforced end-to-end. | Done — see "B6 — Resolution" below | B5 (done) |
 | B7 | P1 · **RESOLVED 2026-07-28** | Security/Frontend | ✅ Confirmed and fixed. The unauthenticated Next route was the processing/security boundary. Processing now flows through authenticated `POST /api/tools/excel-contacts/process/` → input serializer → focused use case → centralized `service_access_for` → bounded workbook processor → audited in-memory response. | Added `backend/reports/excel_contacts/*` + focused tests; updated URL/settings/audit/dependencies/docs; Frontend now calls the canonical shared API from `features/excel-contacts/api.ts`; deleted the Next route and duplicate JS processor. | Authentication, active account/service/category, direct/category restrictions, file signature/size/dimension limits, safe errors, formula-safe exports, and `service.execute` audit are enforced server-side. | Done — synchronous mode preserves the immediate UI contract (10 MiB/10k-row bounds); old `/api/excel-contacts/process` Next route intentionally removed with no repository callers; 16 Backend B7 tests + policy tests and 4 Frontend tests pass. No Job/Asset migration because neither generic model exists; results are not retained. | — |
 | B8 | P1 | Security/Frontend | Admin route protection is client-side only (`AdminChrome` effect redirect); no `middleware.ts`. Child page effects can fire fetches before the redirect. | `components/admin/AdminChrome.tsx:14-22`; no `middleware.*` in repo | Real protection depends entirely on backend authz; brittle if any admin endpoint is under-guarded | Keep backend as the gate (it is), and add an edge `middleware.ts` guard for `/admin/*`; audit every `admin_api` endpoint's permission class | B4 |
 | B9 | P1 | API/Consistency | API versioning is inconsistent: auth/reports/services under `/api/`, admin under `/api/v1/`. | `config/urls.py:13-19`; `reports/urls.py` | Two versioning contracts in one project; contract drift / client confusion | Version all public endpoints under `/api/v1/`; keep unversioned aliases temporarily for back-compat | — |
@@ -242,6 +242,33 @@ error shaping needed.
 
 **Remaining:** B6 (exposing the template-version draft→active lifecycle and the DOCX
 upload-security scanner via the admin API) is still open and is a larger, feature-sized change.
+
+## B6 — Resolution (2026-07-28)
+**Status:** Resolved (admin template lifecycle and secure upload are reachable end-to-end).
+
+**Fix:**
+- Added nested admin-only list/upload/detail and validate/activate/deactivate/archive
+  endpoints. Lifecycle transitions run through focused application use cases and every
+  successful action records actor, timestamp, target, and optional reason in `AuditEvent`.
+- Uploaded DOCX files are structurally scanned with bounded compressed/uncompressed size,
+  entry count and compression ratio; traversal, malformed packages, macros/executables,
+  OLE/embedded packages, external relationships, XML entities, encryption, and wrong
+  extension/signature are rejected with safe errors. Managed files use randomized storage
+  keys behind `DocumentStorage`; a failed DB write removes the blob.
+- Added the archived state and a conditional unique DB constraint for one active version per
+  report type (migration `0010`). Activation locks the report type and all versions,
+  rechecks the file/checksum, retires the previous active version, and supports deterministic
+  idempotent reactivation.
+- Report creation now returns stable `409 NO_ACTIVE_TEMPLATE` unless an active checksummed
+  version exists. Each report stores the selected version, so later deactivation/archive
+  cannot rewrite history or break retries.
+- Replaced the Admin UI's editable template filename with real DOCX upload, lifecycle status,
+  and confirmed validate/activate/deactivate/archive controls.
+
+**Verification:** focused API/security/version tests cover permissions, unsafe/oversized
+uploads, lifecycle and repeated activation, the DB uniqueness invariant, history, state
+bypass prevention, audit, cleanup, and safe errors. Full Definition-of-Done results are
+recorded in the implementation handoff.
 
 ## B11/B12 — Resolution (2026-07-28)
 **Status:** Resolved (analytics N+1 removed; supporting index added).

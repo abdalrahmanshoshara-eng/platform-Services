@@ -11,6 +11,7 @@ from reports.catalog.selectors import active_version
 from reports.catalog.validation import validate_report_input
 from reports.models import GeneratedReport
 from reports.shared.correlation import get_correlation_id
+from reports.shared.exceptions import DomainError
 
 from .domain import transition
 from .tasks import generate_report_task
@@ -20,9 +21,13 @@ class CreateReportUseCase:
     def execute(self, *, user, data) -> GeneratedReport:
         report_type = data["report_type"]
         version = active_version(report_type)
-        # Backend is the source of truth: validate input against the active
-        # version snapshot when present, otherwise the report type schema.
-        schema = version.fields_schema if version else (report_type.fields_schema or [])
+        if version is None:
+            raise DomainError(
+                "لا يوجد قالب نشط وصالح لهذا النوع من التقارير.",
+                code="NO_ACTIVE_TEMPLATE",
+                status_code=409,
+            )
+        schema = version.fields_schema
         input_data = validate_report_input(schema, data.get("input_data") or {})
         report = GeneratedReport.objects.create(
             created_by=user,

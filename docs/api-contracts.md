@@ -23,6 +23,24 @@ Base: `/api`. Auth via HttpOnly cookies; unsafe methods require `X-CSRFToken`.
 ## Dashboard
 - `GET /api/dashboard/stats/` → aggregated counts + latest reports.
 
+## Admin template versions
+All endpoints require a platform administrator and live below `/api/v1/admin`.
+
+- `GET /report-types/{report_type_id}/template-versions/` → version metadata, newest first.
+- `POST /report-types/{report_type_id}/template-versions/` multipart
+  `template_file=.docx` → `201` draft version. Upload is size/signature/ZIP bounded and
+  rejects traversal, bombs, macros/executables, embedded OLE/packages, external
+  relationships, XML entities, and malformed DOCX packages.
+- `GET /report-types/{report_type_id}/template-versions/{id}/` → metadata and validation state.
+- `POST .../{id}/validate/` → validates schema/placeholders and records a checksum.
+- `POST .../{id}/activate/` → atomically makes the validated version the sole active version.
+- `POST .../{id}/deactivate/` → makes an active version unavailable for new reports.
+- `POST .../{id}/archive/` → archives a non-active version without deleting its file/history.
+
+Lifecycle actions accept optional `{reason}` and write audit events. Template-version
+`PATCH`/`DELETE` are unsupported; `ReportType.template_file` is read-only in the admin API.
+`POST /api/reports/` returns `409 NO_ACTIVE_TEMPLATE` when no valid active version exists.
+
 ## Excel Contacts
 - `POST /api/tools/excel-contacts/process/` (authenticated multipart:
   `file=.xlsx|.xls`, `countryCode`) → `200`

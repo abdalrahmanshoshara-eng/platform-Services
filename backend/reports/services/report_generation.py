@@ -7,6 +7,7 @@ from django.utils import timezone
 from docxtpl import DocxTemplate
 
 from reports.models import GeneratedReport
+from reports.services.template_storage import template_storage
 from reports.shared.storage import document_storage
 
 from .pdf_converter import LibreOfficePDFConverter
@@ -31,9 +32,11 @@ class ReportGenerationService:
         rid = self.report.id
         with tempfile.TemporaryDirectory(prefix=f"report-{rid}-") as workdir:
             work = Path(workdir)
+            template_local = work / "template.docx"
             docx_local = work / f"{slug}-{rid}.docx"
 
-            document = DocxTemplate(str(self._template_path()))
+            template_local.write_bytes(self._template_bytes())
+            document = DocxTemplate(str(template_local))
             document.render(self._context(), autoescape=True)
             document.save(str(docx_local))
 
@@ -45,14 +48,12 @@ class ReportGenerationService:
 
     def _template_file_name(self) -> str:
         version = self.report.template_version
-        return version.template_file if version else self.report.report_type.template_file
+        if version is None:
+            raise RuntimeError("report has no template version")
+        return version.template_file
 
-    def _template_path(self) -> Path:
-        template_name = self._template_file_name()
-        template_path = Path(settings.BASE_DIR) / "reports" / "templates" / "reports" / template_name
-        if not template_path.exists():
-            raise FileNotFoundError(f"Template file not found: {template_path}")
-        return template_path
+    def _template_bytes(self) -> bytes:
+        return template_storage.read(self._template_file_name())
 
     def _context(self) -> dict:
         input_data = self.report.input_data or {}

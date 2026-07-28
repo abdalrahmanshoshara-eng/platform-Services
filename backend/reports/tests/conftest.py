@@ -1,8 +1,11 @@
+import hashlib
+
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
-from reports.models import ReportType
+from reports.models import ReportTemplateVersion, ReportType
+from reports.services.template_storage import template_storage
 
 FIELD_VISIT_FIELDS = [
     {"name": "organization_name", "label_ar": "اسم الجهة", "type": "text", "required": True},
@@ -36,7 +39,7 @@ def other_user(db):
 
 @pytest.fixture
 def report_type(db):
-    return ReportType.objects.create(
+    report_type = ReportType.objects.create(
         name="Field Visit",
         slug="field-visit",
         description="test",
@@ -44,6 +47,16 @@ def report_type(db):
         fields_schema=FIELD_VISIT_FIELDS,
         is_active=True,
     )
+    template_data = template_storage.read(report_type.template_file)
+    ReportTemplateVersion.objects.create(
+        report_type=report_type,
+        version=1,
+        template_file=report_type.template_file,
+        fields_schema=report_type.fields_schema,
+        checksum=hashlib.sha256(template_data).hexdigest(),
+        status=ReportTemplateVersion.Status.ACTIVE,
+    )
+    return report_type
 
 
 @pytest.fixture

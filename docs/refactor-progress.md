@@ -167,7 +167,10 @@ ruff check . && black --check . && python manage.py check
   - `catalog/security.py` `TemplateSecurityScanner`: filename safety, size caps, DOCX signature, ZIP structure + required entries, zip-slip, compression-ratio/zip-bomb, macro/executable rejection, bad-zip handling. No external AV (documented deferred).
   - `ActivateTemplateVersionUseCase`: validates schema + placeholders, computes checksum, activates, and deactivates the previous active version (one active per type). Create flow now attaches the active version + validates input against its snapshot.
 - **Commands run (sandbox)**: `pytest` → **44 passed** (schema/input validation, activation + immutability, single-active, DOCX scanner cases); `manage.py migrate` from empty DB OK; `ruff`/`black` clean; `makemigrations --check` clean.
-- **Note**: A public template-upload REST endpoint is not added yet (current templates ship with the app); the scanner + versioning services are ready for it. Antivirus scanning is a documented deferred item.
+- **2026-07-28 B6 follow-up**: admin-only upload/list/detail and audited
+  validate/activate/deactivate/archive endpoints plus the minimal Admin UI are now live.
+  Activation uses row locks and a one-active DB constraint; generation requires the active
+  checksummed snapshot. Public/non-admin upload and external antivirus remain deferred.
 - **Suggested commits**:
   ```
   feat: add immutable report template versions

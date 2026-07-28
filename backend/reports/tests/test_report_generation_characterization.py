@@ -76,8 +76,8 @@ def test_polling_status_endpoint(
 def test_generation_marks_failed_after_max_attempts(
     api, normal_user, login, report_type, eager, fake_pdf, django_capture_on_commit_callbacks
 ):
-    report_type.template_file = "does_not_exist.docx"
-    report_type.save(update_fields=["template_file"])
+    # Generation reads the immutable version snapshot, never ReportType.template_file.
+    report_type.versions.filter(status="active").update(template_file="does_not_exist.docx")
     login(normal_user)
     with django_capture_on_commit_callbacks(execute=True):
         created = api.post("/api/reports/", _payload(report_type), format="json").json()
