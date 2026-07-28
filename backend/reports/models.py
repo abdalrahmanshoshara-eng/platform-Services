@@ -146,6 +146,8 @@ class AuditEvent(models.Model):
         indexes = [
             models.Index(fields=["action"]),
             models.Index(fields=["actor", "-created_at"]),
+            # Backs per-target analytics lookups (e.g. service.launch counts by service).
+            models.Index(fields=["action", "target_type", "target_id"]),
         ]
 
     def __str__(self):

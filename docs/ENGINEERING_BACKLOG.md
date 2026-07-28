@@ -17,8 +17,8 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B8 | P1 | Security/Frontend | Admin route protection is client-side only (`AdminChrome` effect redirect); no `middleware.ts`. Child page effects can fire fetches before the redirect. | `components/admin/AdminChrome.tsx:14-22`; no `middleware.*` in repo | Real protection depends entirely on backend authz; brittle if any admin endpoint is under-guarded | Keep backend as the gate (it is), and add an edge `middleware.ts` guard for `/admin/*`; audit every `admin_api` endpoint's permission class | B4 |
 | B9 | P1 | API/Consistency | API versioning is inconsistent: auth/reports/services under `/api/`, admin under `/api/v1/`. | `config/urls.py:13-19`; `reports/urls.py` | Two versioning contracts in one project; contract drift / client confusion | Version all public endpoints under `/api/v1/`; keep unversioned aliases temporarily for back-compat | — |
 | B10 | P1 · **RESOLVED 2026-07-28** | Security/Auth | ✅ Fixed. Registration now runs Django's configured password validators (length, common-password, numeric-only, similarity to username/email) via `RegisterSerializer.validate()`, not just `min_length=8`. Throttle half was already resolved under B1 (`register` scope + shared cache). | `accounts/serializers.py` `RegisterSerializer` | Weak/common passwords were accepted platform-wide | Done — see "B10 — Resolution" below | B1 (done) |
-| B11 | P2 | Performance | N+1 in admin analytics: Python loop over every `Service` issuing 3 count queries each (`success`/`denied`/restrictions). | `admin_api/views.py:324-336` | `1+3N` queries; degrades as catalog/audit grow | Replace with grouped `values(...).annotate(Count(...))` aggregation | B12 |
-| B12 | P2 | Performance/Data | Usage analytics derived from `AuditEvent` filtered by string `target_id`, but there is no index on `(action,target_type,target_id)`. | `admin_api/views.py:326-336`; indexes at `models.py:145-149` | Per-service analytics lookups scan/inefficient at volume | Add a composite index, or introduce a first-class usage-event table if analytics grows | — |
+| B11 | P2 · **RESOLVED 2026-07-28** | Performance | ✅ Fixed. The per-service loop that issued 3 count queries each is replaced by two grouped aggregations (launch counts by `target_id`+`outcome`, restriction counts by `service_id`), then a single service pass reads from in-memory maps — query count is now flat regardless of service count. | `admin_api/views.py` `AdminAnalyticsView` | `1+3N` queries degraded as catalog/audit grew | Done — see "B11/B12 — Resolution" below | B12 (done) |
+| B12 | P2 · **RESOLVED 2026-07-28** | Performance/Data | ✅ Fixed. Added a composite index `AuditEvent(action, target_type, target_id)` backing the service.launch analytics lookups (migration `0009`). | `models.py` `AuditEvent.Meta.indexes`; migration `0009_auditevent_reports_aud_action_11faf8_idx` | Per-service analytics lookups were unindexed at volume | Done — see "B11/B12 — Resolution" below | — |
 | B13 | P2 | Performance | Services list is effectively N+1 for restricted users: `prefetch_related("user_restrictions",...)` is set but `service_access_for` re-queries `.filter(...).first()` per service instead of using the prefetch. | `services_catalog/views.py:22`; `policy.py:21-27`; `serializers.py:34-38` | One extra query per service on the authenticated list endpoint | Compute restrictions from the prefetched set, or annotate access in the queryset | — |
 | B14 | P2 | Security/Correctness | Dead `ReportGenerationService.generate()` stores raw exception text into `error_message`, which is serialized to clients; unused today but latent. | `services/report_generation.py:46-59`; serialized at `generation/serializers.py:17-32,71-82` | If ever wired to a sync path, leaks internal paths/stderr to users | Delete the dead method or sanitize like `tasks.py`; add a test asserting `error_message` never leaks internals | — |
 | B15 | P2 | Frontend/Architecture | Two parallel API/auth stacks coexist: canonical `@/shared/api`+`@/shared/auth` vs deprecated `@/lib/{api,auth,useRequireAuth}` shims still imported by several report pages. | `lib/api.ts`, `lib/auth.ts` (marked deprecated) imported by `app/reports/page.tsx:8-9`, `app/reports/[id]/page.tsx:9-10`, `app/report-types/page.tsx:6-7` | Inconsistent boundaries; refactor hazard if stubs regain token storage | Finish migration to `@/shared`; delete the shims and orphaned hooks (`features/dashboard/useDashboard.ts`, `features/reports-history/useReports.ts`) | — |
@@ -242,6 +242,36 @@ error shaping needed.
 
 **Remaining:** B6 (exposing the template-version draft→active lifecycle and the DOCX
 upload-security scanner via the admin API) is still open and is a larger, feature-sized change.
+
+## B11/B12 — Resolution (2026-07-28)
+**Status:** Resolved (analytics N+1 removed; supporting index added).
+
+**Root cause:** `AdminAnalyticsView` looped over every `Service` and issued three `COUNT`
+queries per service (successful launches, denied launches, active restrictions) — `1+3N`
+queries. Those launch counts filtered `AuditEvent` by `(action, target_type, target_id)`,
+which had no covering index.
+
+**Fix:**
+- `admin_api/views.py`: replaced the loop with two grouped aggregations —
+  `AuditEvent … .values("target_id","outcome").annotate(Count("id"))` and
+  `UserServiceRestriction … .values("service_id").annotate(Count("id"))` — then a single
+  `Service.objects.select_related("category")` pass reads counts from in-memory maps.
+  Query count is now independent of the number of services. Response shape/semantics
+  unchanged (restriction window still keyed on `expires_at` as before).
+- `models.py`: added `Index(action, target_type, target_id)` on `AuditEvent`; additive,
+  reversible migration `0009`.
+
+**Files changed:** `backend/reports/admin_api/views.py`, `backend/reports/models.py`,
+new `backend/reports/migrations/0009_auditevent_reports_aud_action_11faf8_idx.py`,
+new `backend/reports/tests/test_analytics_performance.py`. No frontend changes.
+
+**Verification (SQLite test settings):**
+- `python manage.py check` — 0 issues; `makemigrations --check --dry-run` — No changes
+  (0009 accounts for the only model change).
+- `pytest test_analytics_performance.py` — 2 passed: counts are correct, and the request
+  query count is identical with 2 vs 7 services (proving no per-service growth). Full suite:
+  97 passed, 4 failed (the same pre-existing environmental media-mount `PermissionError`s,
+  unrelated to B11/B12).
 
 ## Verification performed
 - `npm run typecheck` (frontend, `tsc --noEmit`) — **passed** (exit 0).
