@@ -28,10 +28,14 @@ def test_secret_guard_allows_real_secret_in_production():
 def test_security_headers_are_defined():
     assert base_settings.SECURE_CONTENT_TYPE_NOSNIFF is True
     assert base_settings.SECURE_REFERRER_POLICY == "same-origin"
-    assert base_settings.SECURE_PROXY_SSL_HEADER == ("HTTP_X_FORWARDED_PROTO", "https")
     # Cookies follow the secure flag, which itself follows DEBUG.
     assert base_settings.CSRF_COOKIE_SECURE == base_settings.AUTH_COOKIE_SECURE
     assert base_settings.SESSION_COOKIE_SECURE == base_settings.AUTH_COOKIE_SECURE
+
+
+def test_proxy_ssl_header_requires_explicit_trust():
+    assert base_settings.proxy_ssl_header(False) is None
+    assert base_settings.proxy_ssl_header(True) == ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 @pytest.mark.django_db

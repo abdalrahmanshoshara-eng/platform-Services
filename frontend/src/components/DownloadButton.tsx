@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { downloadFile } from '@/lib/api';
+import { downloadFile } from '@/shared/api/client';
 
 export default function DownloadButton({
   url,

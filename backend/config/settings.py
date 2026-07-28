@@ -16,6 +16,11 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
+def proxy_ssl_header(trust_forwarded_proto: bool) -> tuple[str, str] | None:
+    """Trust the proxy scheme header only when the deployment explicitly opts in."""
+    return ("HTTP_X_FORWARDED_PROTO", "https") if trust_forwarded_proto else None
+
+
 INSECURE_SECRET_KEY = "unsafe-development-fallback-change-before-production-32chars"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", INSECURE_SECRET_KEY)
 # Fail closed: default to a production-safe DEBUG=False so a forgotten env var never
@@ -29,9 +34,7 @@ def require_secure_secret(debug: bool, secret_key: str) -> None:
     if not debug and secret_key == INSECURE_SECRET_KEY:
         from django.core.exceptions import ImproperlyConfigured
 
-        raise ImproperlyConfigured(
-            "DJANGO_SECRET_KEY must be set to a strong, unique value when DJANGO_DEBUG is off."
-        )
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set to a strong, unique value when DJANGO_DEBUG is off.")
 
 
 require_secure_secret(DEBUG, SECRET_KEY)
@@ -207,16 +210,16 @@ CSRF_COOKIE_SECURE = AUTH_COOKIE_SECURE
 SESSION_COOKIE_SECURE = AUTH_COOKIE_SECURE
 CORS_ALLOW_CREDENTIALS = True
 
-# ---- Transport/security headers (auto-enabled when DEBUG is off) ----
-# Behind the gunicorn/proxy setup, trust the forwarded scheme so SSL redirect and
-# secure-cookie logic see HTTPS. All toggles are env-overridable for edge cases.
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# ---- Transport/security headers (secure production defaults; env-controlled) ----
+# Trust X-Forwarded-Proto only when a verified reverse proxy overwrites that header.
+# The repository's direct gunicorn Docker topology has no such proxy, so opt-in is safer.
+SECURE_PROXY_SSL_HEADER = proxy_ssl_header(env_bool("DJANGO_TRUST_X_FORWARDED_PROTO", False))
 SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
 SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_HSTS_SECONDS", "31536000" if not DEBUG else "0"))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
-SECURE_HSTS_PRELOAD = not DEBUG
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_REFERRER_POLICY = "same-origin"
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_HSTS_PRELOAD", not DEBUG)
+SECURE_CONTENT_TYPE_NOSNIFF = env_bool("DJANGO_SECURE_CONTENT_TYPE_NOSNIFF", True)
+SECURE_REFERRER_POLICY = os.getenv("DJANGO_SECURE_REFERRER_POLICY", "same-origin")
 
 
 # ---- Celery ----

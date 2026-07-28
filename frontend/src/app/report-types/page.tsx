@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import PageHero from '@/components/PageHero';
-import { ReportType, fetchApi } from '@/lib/api';
-import { useRequireAuth } from '@/lib/useRequireAuth';
+import { apiFetch as fetchApi } from '@/shared/api/client';
+import type { ReportType } from '@/shared/api/types';
+import { useRequireAuth } from '@/shared/auth/useRequireAuth';
 
 export default function ReportTypesPage() {
   const ready = useRequireAuth();
