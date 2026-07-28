@@ -1,0 +1,13 @@
+# Direct runtime dependencies (pinned for reproducible builds).
+# Regenerate a full lock with: pip freeze > requirements.lock.txt
+Django==5.2.16
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+psycopg[binary]==3.3.4
+python-dotenv==1.2.2
+docxtpl==0.20.2
+python-docx==1.2.0
+gunicorn==26.0.0
+celery==5.6.3
+redis==8.0.1

@@ -1,0 +1,25 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+media/
+node_modules/
+.next/
+out/
+dist/
+.DS_Store
+coverage/
+.venv/
+.pip-cache/
+_sources/
+*.log
+
+# sandbox-only (not part of project)
+backend/config/settings_sandbox_sqlite.py
+backend/.git-exclude-note
+
+frontend/node_modules/
+frontend/.next/
+frontend/*.tsbuildinfo

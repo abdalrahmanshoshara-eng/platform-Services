@@ -1,0 +1,11 @@
+"""Canonical audit action names."""
+
+LOGIN_SUCCESS = "login.success"
+LOGIN_FAILURE = "login.failure"
+LOGOUT = "logout"
+TOKEN_REFRESH = "token.refresh"
+REPORT_CREATED = "report.created"
+GENERATION_COMPLETED = "report.generation.completed"
+GENERATION_FAILED = "report.generation.failed"
+REPORT_DOWNLOADED = "report.downloaded"
+TEMPLATE_ACTIVATED = "template.activated"
