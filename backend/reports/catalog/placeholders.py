@@ -1,5 +1,7 @@
 """Extract DOCX placeholders and check them against a field schema."""
 
+from io import BytesIO
+
 from docxtpl import DocxTemplate
 
 # Context keys the generator always injects (allowed even if not in the schema).
@@ -13,6 +15,11 @@ RESERVED_PLACEHOLDERS = {
 
 def extract_template_placeholders(docx_path) -> set[str]:
     template = DocxTemplate(str(docx_path))
+    return set(template.get_undeclared_template_variables())
+
+
+def extract_template_placeholders_from_bytes(data: bytes) -> set[str]:
+    template = DocxTemplate(BytesIO(data))
     return set(template.get_undeclared_template_variables())
 
 

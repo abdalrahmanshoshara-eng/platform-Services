@@ -30,6 +30,7 @@ class ReportTemplateVersion(models.Model):
         VALIDATED = "validated", "Validated"
         ACTIVE = "active", "Active"
         INACTIVE = "inactive", "Inactive"
+        ARCHIVED = "archived", "Archived"
         REJECTED = "rejected", "Rejected"
 
     report_type = models.ForeignKey(ReportType, on_delete=models.CASCADE, related_name="versions")
@@ -54,6 +55,13 @@ class ReportTemplateVersion(models.Model):
         ordering = ["report_type", "-version"]
         unique_together = [("report_type", "version")]
         indexes = [models.Index(fields=["report_type", "status"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["report_type"],
+                condition=models.Q(status="active"),
+                name="one_active_template_per_report_type",
+            )
+        ]
 
     def __str__(self):
         return f"{self.report_type.slug} v{self.version} ({self.status})"
@@ -62,7 +70,7 @@ class ReportTemplateVersion(models.Model):
         # Enforce immutability of impactful fields once a version is activated.
         if self.pk:
             previous = ReportTemplateVersion.objects.filter(pk=self.pk).first()
-            if previous and previous.status == self.Status.ACTIVE:
+            if previous and previous.status != self.Status.DRAFT:
                 for field in self.IMMUTABLE_FIELDS:
                     if getattr(previous, field) != getattr(self, field):
                         from reports.shared.exceptions import DomainError

@@ -39,11 +39,12 @@ Files are written to a local `backend_media` volume through Django `FileField`
 - **excel_contacts/** — authenticated synchronous Excel/VCF processing behind the
   centralized service-access policy; validates signatures and bounded workbook limits,
   returns an in-memory ZIP, and records `service.execute`.
-- **admin_api/** — `/api/v1/admin/*`: Users, Services, Jobs, Audit-logs, Report-types
-  viewsets + Dashboard + Analytics; `permissions.py` (admin gate, last-admin protection).
+- **admin_api/** — `/api/v1/admin/*`: Users, Services, Jobs, Audit-logs, Report-types,
+  and nested template-version upload/lifecycle endpoints + Dashboard + Analytics;
+  `permissions.py` (admin gate, last-admin protection).
 - **audit/** — `AuditEvent` writer (`service.py`, `actions.py`).
-- **services/** — `report_generation.py`, `pdf_converter.py`: LibreOffice/subprocess
-  boundary (PDF conversion). `ReportGenerationService.generate()` is **unused** (see backlog C8).
+- **services/** — `report_generation.py`, `pdf_converter.py`, `template_storage.py`:
+  template/document storage and LibreOffice/subprocess infrastructure boundaries.
 - **shared/** — `storage.DocumentStorage`, `permissions`, `errors`/`exceptions`,
   `exception_handler` (unified `{error:{code,message,...}}`), structured JSON `logging`,
   `correlation` middleware (correlation IDs).
@@ -113,7 +114,8 @@ Job/Asset model.
 ## Admin request flow
 `/api/v1/admin/*` viewsets are gated by an admin permission class (`admin_api/permissions.py`)
 enforced server-side. Sensitive mutations (activate/deactivate service, user activate/
-deactivate, bulk restrictions) run in `transaction.atomic` and write `AuditEvent`s.
+deactivate, bulk restrictions, and template validate/activate/deactivate/archive) run
+through focused use cases/transactions and write `AuditEvent`s.
 Last-admin/self-deactivation is blocked (tested). **Gap:** generic `PATCH` on the admin
 Service/ReportType viewsets and Django `admin.py` can flip `is_active`/`status` directly,
 skipping the audited action and its metadata (see backlog).
@@ -138,6 +140,7 @@ expiry/retention job.
 - No **ServiceUsageEvent** — usage/analytics derived from `AuditEvent`.
 - **`UserCategoryRestriction` is modeled but never enforced or writable** (no policy/API
   reads or writes it) — category-level blocking is a no-op (backlog P1).
-- **Template versioning + DOCX security scanner exist but are unreachable via any API**
-  (only unit-tested) — effectively dead code (backlog).
+- Template versions are managed through admin-only nested endpoints. Uploads use randomized
+  storage keys and bounded DOCX scanning; report creation requires the sole active,
+  checksummed version and stores that immutable snapshot.
 - **API versioning is inconsistent** — admin is `/api/v1/`, auth/reports are `/api/`.

@@ -237,6 +237,9 @@ CELERY_TASK_ALWAYS_EAGER = env_bool("CELERY_TASK_ALWAYS_EAGER", False)
 CELERY_TASK_EAGER_PROPAGATES = False
 # Max generation retries (report is marked "failed" after this many attempts).
 REPORT_MAX_ATTEMPTS = int(os.getenv("REPORT_MAX_ATTEMPTS", "3"))
+TEMPLATE_MAX_UPLOAD_BYTES = int(os.getenv("TEMPLATE_MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
+TEMPLATE_MAX_ARCHIVE_ENTRIES = int(os.getenv("TEMPLATE_MAX_ARCHIVE_ENTRIES", "2000"))
+TEMPLATE_MAX_XML_PART_BYTES = int(os.getenv("TEMPLATE_MAX_XML_PART_BYTES", str(10 * 1024 * 1024)))
 
 
 # ---- Structured logging ----

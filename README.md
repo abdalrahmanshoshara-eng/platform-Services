@@ -293,7 +293,5 @@ backend/reports/services/pdf_converter.py
 
 - نقل `ReportGenerationService.generate()` إلى Celery task.
 - إضافة معاينة للتقرير قبل التوليد.
-- رفع قوالب Word من واجهة الأدمن.
-- إضافة versioning للقوالب.
+- إضافة فحص antivirus خارجي لقوالب Word المرفوعة من واجهة الأدمن.
 - إضافة صلاحيات تفصيلية حسب الإدارات.
-- إضافة audit log.

@@ -220,10 +220,11 @@ network errors. No WebSockets.
 
 ## 17. Template upload & validation flow
 
-Validation services exist (`catalog/validation.py`, `catalog/placeholders.py`,
-`catalog/security.py`). On (future) upload or on activation: schema validated →
-`TemplateSecurityScanner` structural checks → placeholders reconciled with the schema.
-A public upload endpoint is a documented deferred item (see `deferred-features.md`).
+Admin uploads enter through the admin-only multipart endpoint and are persisted with
+non-guessable storage keys behind `DocumentStorage`. Upload performs bounded structural
+DOCX scanning; the explicit validate action checks the schema, placeholders, and checksum.
+Failed persistence removes the uploaded blob. There is intentionally no public template
+upload or permanent public file URL.
 
 ## 18. Template versioning flow
 
@@ -231,16 +232,20 @@ A public upload endpoint is a documented deferred item (see `deferred-features.m
 stateDiagram-v2
   [*] --> draft
   draft --> validated
-  draft --> active: activate (validate + checksum)
   validated --> active
   active --> inactive: superseded by a newer active version
-  draft --> rejected
-  active --> active: immutable (impactful fields frozen)
+  active --> inactive: explicit deactivation
+  inactive --> active: reactivation
+  draft --> archived
+  validated --> archived
+  inactive --> archived
 ```
 
-One active version per report type. Activated versions are immutable in impactful fields
-(`template_file`, `fields_schema`, `checksum`); changes require a new version. A version
-referenced by reports cannot be deleted (`PROTECT`).
+Activation locks the report type and its versions in one transaction; a conditional unique
+constraint enforces at most one active version per report type. Validated and historical
+versions are immutable in impactful fields (`template_file`, `fields_schema`, `checksum`);
+changes require a new version. New reports require an active version with a checksum and
+retain that version through `PROTECT`, including after it is deactivated or archived.
 
 ## 19. Secure file download flow
 

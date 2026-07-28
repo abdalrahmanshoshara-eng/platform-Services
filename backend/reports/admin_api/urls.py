@@ -8,6 +8,7 @@ from .views import (
     AdminJobViewSet,
     AdminReportTypeViewSet,
     AdminServiceViewSet,
+    AdminTemplateVersionViewSet,
     AdminUserViewSet,
 )
 
@@ -21,4 +22,34 @@ router.register("report-types", AdminReportTypeViewSet, basename="admin-report-t
 urlpatterns = [
     path("dashboard/", AdminDashboardView.as_view(), name="admin-dashboard"),
     path("analytics/", AdminAnalyticsView.as_view(), name="admin-analytics"),
+    path(
+        "report-types/<int:report_type_pk>/template-versions/",
+        AdminTemplateVersionViewSet.as_view({"get": "list", "post": "create"}),
+        name="admin-template-version-list",
+    ),
+    path(
+        "report-types/<int:report_type_pk>/template-versions/<int:pk>/",
+        AdminTemplateVersionViewSet.as_view({"get": "retrieve"}),
+        name="admin-template-version-detail",
+    ),
+    path(
+        "report-types/<int:report_type_pk>/template-versions/<int:pk>/validate/",
+        AdminTemplateVersionViewSet.as_view({"post": "validate_version"}),
+        name="admin-template-version-validate",
+    ),
+    path(
+        "report-types/<int:report_type_pk>/template-versions/<int:pk>/activate/",
+        AdminTemplateVersionViewSet.as_view({"post": "activate"}),
+        name="admin-template-version-activate",
+    ),
+    path(
+        "report-types/<int:report_type_pk>/template-versions/<int:pk>/deactivate/",
+        AdminTemplateVersionViewSet.as_view({"post": "deactivate"}),
+        name="admin-template-version-deactivate",
+    ),
+    path(
+        "report-types/<int:report_type_pk>/template-versions/<int:pk>/archive/",
+        AdminTemplateVersionViewSet.as_view({"post": "archive"}),
+        name="admin-template-version-archive",
+    ),
 ] + router.urls

@@ -6,8 +6,8 @@ product decision / require external services).
 - **Approval workflow** (draft/under_review/approved/rejected for reports): a business feature,
   not an engineering fix. Needs a Product Owner decision. Kept separate from the technical
   generation states. Add as a new module/state machine without disturbing generation.
-- **Public template-upload endpoint**: the `TemplateSecurityScanner` + versioning services are
-  ready; a REST upload endpoint + UI are not built (current templates ship with the app).
+- **Public/non-admin template upload**: B6 added an admin-only REST upload endpoint and UI.
+  Accepting templates from ordinary or untrusted users remains intentionally unsupported.
 - **Antivirus scanning** of uploaded templates (e.g. ClamAV): only structural checks exist.
   Recommended before accepting templates from untrusted sources in production.
 - **S3 / object storage adapter**: `DocumentStorage` supports it; only local storage is implemented.

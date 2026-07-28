@@ -2,21 +2,38 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.functions import TruncDate
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from reports.audit.actions import (
+    TEMPLATE_ACTIVATED,
+    TEMPLATE_ARCHIVED,
+    TEMPLATE_DEACTIVATED,
+    TEMPLATE_UPLOADED,
+    TEMPLATE_VALIDATED,
+)
 from reports.audit.service import record
+from reports.catalog.application import (
+    ActivateTemplateVersionUseCase,
+    ArchiveTemplateVersionUseCase,
+    CreateTemplateVersionUseCase,
+    DeactivateTemplateVersionUseCase,
+    ValidateTemplateVersionUseCase,
+)
 from reports.generation.application import RetryReportUseCase
 from reports.generation.domain import transition
 from reports.models import (
     AuditEvent,
     GeneratedReport,
+    ReportTemplateVersion,
     ReportType,
     Service,
     ServiceCategory,
@@ -30,9 +47,11 @@ from .serializers import (
     AdminJobSerializer,
     AdminReportTypeSerializer,
     AdminServiceSerializer,
+    AdminTemplateVersionSerializer,
     AdminUserDetailSerializer,
     AdminUserSerializer,
     AuditEventSerializer,
+    TemplateVersionUploadSerializer,
 )
 
 User = get_user_model()
@@ -348,6 +367,95 @@ class AdminReportTypeViewSet(viewsets.ModelViewSet):
             target=report_type,
             metadata={"is_active": report_type.is_active},
         )
+
+
+class AdminTemplateVersionViewSet(viewsets.GenericViewSet):
+    permission_classes = [IsPlatformAdmin]
+    serializer_class = AdminTemplateVersionSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        return (
+            ReportTemplateVersion.objects.filter(report_type_id=self.kwargs["report_type_pk"])
+            .annotate(_has_reports=Exists(GeneratedReport.objects.filter(template_version_id=OuterRef("pk"))))
+            .select_related("report_type", "created_by")
+            .order_by("-version")
+        )
+
+    def list(self, request, *args, **kwargs):
+        return Response(self.get_serializer(self.get_queryset(), many=True).data)
+
+    def retrieve(self, request, *args, **kwargs):
+        return Response(self.get_serializer(self.get_object()).data)
+
+    def create(self, request, *args, **kwargs):
+        upload_serializer = TemplateVersionUploadSerializer(data=request.data)
+        upload_serializer.is_valid(raise_exception=True)
+        report_type = get_object_or_404(ReportType, pk=self.kwargs["report_type_pk"])
+        uploaded = upload_serializer.validated_data["template_file"]
+        version = CreateTemplateVersionUseCase().execute(
+            report_type=report_type,
+            actor=request.user,
+            filename=uploaded.name,
+            data=uploaded.read(),
+        )
+        version._has_reports = False
+        record(
+            TEMPLATE_UPLOADED,
+            actor=request.user,
+            request=request,
+            target=version,
+            metadata={"report_type_id": report_type.pk},
+        )
+        return Response(
+            self.get_serializer(version).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def validate_version(self, request, *args, **kwargs):
+        version = ValidateTemplateVersionUseCase().execute(version=self.get_object())
+        record(
+            TEMPLATE_VALIDATED,
+            actor=request.user,
+            request=request,
+            target=version,
+            metadata={"reason": _reason(request)},
+        )
+        return Response(self.get_serializer(version).data)
+
+    def activate(self, request, *args, **kwargs):
+        version = ActivateTemplateVersionUseCase().execute(version=self.get_object())
+        record(
+            TEMPLATE_ACTIVATED,
+            actor=request.user,
+            request=request,
+            target=version,
+            metadata={"reason": _reason(request)},
+        )
+        return Response(self.get_serializer(version).data)
+
+    def deactivate(self, request, *args, **kwargs):
+        version = DeactivateTemplateVersionUseCase().execute(version=self.get_object())
+        record(
+            TEMPLATE_DEACTIVATED,
+            actor=request.user,
+            request=request,
+            target=version,
+            metadata={"reason": _reason(request)},
+        )
+        return Response(self.get_serializer(version).data)
+
+    def archive(self, request, *args, **kwargs):
+        version = ArchiveTemplateVersionUseCase().execute(version=self.get_object())
+        record(
+            TEMPLATE_ARCHIVED,
+            actor=request.user,
+            request=request,
+            target=version,
+            metadata={"reason": _reason(request)},
+        )
+        return Response(self.get_serializer(version).data)
 
 
 class AdminAnalyticsView(APIView):

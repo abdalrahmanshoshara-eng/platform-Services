@@ -210,3 +210,25 @@ export type AdminReportType = ReportType & {
   versions_count: number;
   reports_count: number;
 };
+
+export type TemplateVersionStatus =
+  | 'draft'
+  | 'validated'
+  | 'active'
+  | 'inactive'
+  | 'archived'
+  | 'rejected';
+
+export type AdminTemplateVersion = {
+  id: number;
+  report_type: number;
+  version: number;
+  fields_schema: FieldSchema[];
+  checksum: string;
+  status: TemplateVersionStatus;
+  created_by: number | null;
+  created_by_name: string;
+  created_at: string;
+  activated_at: string | null;
+  has_reports: boolean;
+};
