@@ -31,13 +31,13 @@ def test_registration_is_rate_limited(api, monkeypatch):
 
     first = api.post(
         "/api/auth/register/",
-        {"username": "reg1", "email": "reg1@example.com", "password": "secret123"},
+        {"username": "reg1", "email": "reg1@example.com", "password": "strongPa55phrase"},
         format="json",
     )
     assert first.status_code == 201
     second = api.post(
         "/api/auth/register/",
-        {"username": "reg2", "email": "reg2@example.com", "password": "secret123"},
+        {"username": "reg2", "email": "reg2@example.com", "password": "strongPa55phrase"},
         format="json",
     )
     assert second.status_code == 429

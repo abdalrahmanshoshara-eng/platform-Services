@@ -16,7 +16,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B7 | P1 | Security/Frontend | `POST /api/excel-contacts/process` (Next server route) processes uploaded Excel with **no auth check**; only the React page gates access client-side. Business logic also lives entirely in the frontend, bypassing the backend tool pipeline. | `app/api/excel-contacts/process/route.js:14-40` (no session check); page guard `app/tools/excel-contacts/page.tsx` | Unauthenticated compute/DoS vector; tool logic outside backend authz/audit | Add auth (call backend or verify cookie) + rate limit, or move processing to a backend tool endpoint | — |
 | B8 | P1 | Security/Frontend | Admin route protection is client-side only (`AdminChrome` effect redirect); no `middleware.ts`. Child page effects can fire fetches before the redirect. | `components/admin/AdminChrome.tsx:14-22`; no `middleware.*` in repo | Real protection depends entirely on backend authz; brittle if any admin endpoint is under-guarded | Keep backend as the gate (it is), and add an edge `middleware.ts` guard for `/admin/*`; audit every `admin_api` endpoint's permission class | B4 |
 | B9 | P1 | API/Consistency | API versioning is inconsistent: auth/reports/services under `/api/`, admin under `/api/v1/`. | `config/urls.py:13-19`; `reports/urls.py` | Two versioning contracts in one project; contract drift / client confusion | Version all public endpoints under `/api/v1/`; keep unversioned aliases temporarily for back-compat | — |
-| B10 | P1 · **Partially done** | Security/Auth | Registration does not run Django password validators (only `min_length=8`). ~~No dedicated throttle scope~~ — throttle half resolved under B1 (a `register` scope + shared cache). Password-validator half is still open. | `accounts/serializers.py:27-41` (no `validate_password`) | Weak/common passwords accepted platform-wide | Remaining: call `django.contrib.auth.password_validation.validate_password` in `RegisterSerializer` | B1 (done) |
+| B10 | P1 · **RESOLVED 2026-07-28** | Security/Auth | ✅ Fixed. Registration now runs Django's configured password validators (length, common-password, numeric-only, similarity to username/email) via `RegisterSerializer.validate()`, not just `min_length=8`. Throttle half was already resolved under B1 (`register` scope + shared cache). | `accounts/serializers.py` `RegisterSerializer` | Weak/common passwords were accepted platform-wide | Done — see "B10 — Resolution" below | B1 (done) |
 | B11 | P2 | Performance | N+1 in admin analytics: Python loop over every `Service` issuing 3 count queries each (`success`/`denied`/restrictions). | `admin_api/views.py:324-336` | `1+3N` queries; degrades as catalog/audit grow | Replace with grouped `values(...).annotate(Count(...))` aggregation | B12 |
 | B12 | P2 | Performance/Data | Usage analytics derived from `AuditEvent` filtered by string `target_id`, but there is no index on `(action,target_type,target_id)`. | `admin_api/views.py:326-336`; indexes at `models.py:145-149` | Per-service analytics lookups scan/inefficient at volume | Add a composite index, or introduce a first-class usage-event table if analytics grows | — |
 | B13 | P2 | Performance | Services list is effectively N+1 for restricted users: `prefetch_related("user_restrictions",...)` is set but `service_access_for` re-queries `.filter(...).first()` per service instead of using the prefetch. | `services_catalog/views.py:22`; `policy.py:21-27`; `serializers.py:34-38` | One extra query per service on the authenticated list endpoint | Compute restrictions from the prefetched set, or annotate access in the queryset | — |
@@ -151,6 +151,33 @@ frontend changes.
 
 **Remaining:** the register password-strength gap (B10) is still open — throttling alone
 does not reject weak passwords.
+
+## B10 — Resolution (2026-07-28)
+**Status:** Resolved (both halves now closed: B1 added the throttle scope; this adds
+password-strength enforcement).
+
+**Root cause:** `RegisterSerializer` enforced only a bare `min_length=8` and never called
+`django.contrib.auth.password_validation.validate_password`, so common/weak passwords
+(e.g. `secret123`) were accepted even though `AUTH_PASSWORD_VALIDATORS` was configured.
+
+**Fix:** `RegisterSerializer.validate()` now builds a transient `User(username, email)` and
+runs `validate_password(password, user=candidate)`, mapping Django's `ValidationError` to a
+DRF `{"password": [...]}` error. This activates all four configured validators including
+similarity to username/email.
+
+**Files changed:** `backend/reports/accounts/serializers.py`, new
+`backend/reports/tests/test_registration_password.py`. Two existing tests that registered via
+the API with the now-rejected `secret123` were updated to a compliant password
+(`test_service_catalog.py`, `test_throttling_cache.py`) — a required consequence of the
+behavior change, not a rewrite. `create_user` fixtures are unaffected (they bypass the
+serializer). No migration. No frontend changes.
+
+**Verification (SQLite test settings):**
+- `python manage.py check` — 0 issues.
+- `pytest test_registration_password.py` — 4 passed (common, numeric-only, and
+  username-similar passwords rejected with 400; strong password accepted with 201). Full
+  suite: 84 passed, 4 failed (the same pre-existing environmental media-mount
+  `PermissionError`s, unrelated to B10).
 
 ## Verification performed
 - `npm run typecheck` (frontend, `tsc --noEmit`) — **passed** (exit 0).

@@ -1,0 +1,30 @@
+# Normalize line endings across platforms.
+# Store all text files as LF in the repository and check them out as LF,
+# which stops the recurring CRLF/LF "phantom" diffs on Windows checkouts.
+* text=auto eol=lf
+
+# Keep OS-native line endings for Windows-only scripts.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never apply text/EOL conversion.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.pdf  binary
+*.docx binary
+*.dotx binary
+*.xlsx binary
+*.xls  binary
+*.pptx binary
+*.zip  binary
+*.gz   binary
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
+*.eot  binary

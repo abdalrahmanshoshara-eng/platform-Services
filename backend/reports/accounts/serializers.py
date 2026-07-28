@@ -1,4 +1,6 @@
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 User = get_user_model()
@@ -36,6 +38,16 @@ class RegisterSerializer(serializers.ModelSerializer):
         if User.objects.filter(email__iexact=normalized).exists():
             raise serializers.ValidationError("البريد الإلكتروني مستخدم بالفعل.")
         return normalized
+
+    def validate(self, attrs):
+        # Enforce Django's configured password validators (length, common-password,
+        # numeric-only, similarity to username/email) — not just the field min_length.
+        candidate = User(username=attrs.get("username", ""), email=attrs.get("email", ""))
+        try:
+            validate_password(attrs["password"], user=candidate)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"password": list(exc.messages)})
+        return attrs
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
