@@ -22,8 +22,8 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B13 | P2 · **RESOLVED 2026-07-28** | Performance | ✅ Fixed as part of B2: the serializer now calls `access_decisions_for(user, services)` once (two user-scoped queries) and the unused `prefetch_related` was removed, so the list endpoint's query count is flat regardless of service count. | `services_catalog/serializers.py`, `policy.py` (B2); regression test `test_services_list_perf.py` | Was one extra query per service on the authenticated list | Done (via B2) — confirmed with a query-count test | — |
 | B14 | P2 · **RESOLVED 2026-07-28** | Security/Correctness | ✅ Fixed. The dead, unsafe `ReportGenerationService.generate()` (and its `_set_status` helper) that stored `str(exc)` into the client-visible `error_message` were removed; only the raising `produce()` remains, and the Celery task keeps ownership of sanitized status. | `services/report_generation.py`; regression test `test_recover_and_cleanup.py` | If ever wired to a sync path it would have leaked internal paths/stderr | Done — dead method removed; guarded by a test | — |
 | B15 | P2 | Frontend/Architecture | Two parallel API/auth stacks coexist: canonical `@/shared/api`+`@/shared/auth` vs deprecated `@/lib/{api,auth,useRequireAuth}` shims still imported by several report pages. | `lib/api.ts`, `lib/auth.ts` (marked deprecated) imported by `app/reports/page.tsx:8-9`, `app/reports/[id]/page.tsx:9-10`, `app/report-types/page.tsx:6-7` | Inconsistent boundaries; refactor hazard if stubs regain token storage | Finish migration to `@/shared`; delete the shims and orphaned hooks (`features/dashboard/useDashboard.ts`, `features/reports-history/useReports.ts`) | — |
-| B16 | P2 | Frontend/UX | No App Router `error.tsx`/`loading.tsx`/`not-found.tsx` anywhere; every page hand-rolls loading/error state. Empty states are inconsistent (admin `<AdminEmpty>` vs bespoke markup in user pages). | grep: none under `app/`; `app/services/page.tsx:125`, `app/reports/page.tsx:61-63` | No route-level error boundaries; uncaught render errors are unhandled; inconsistent UX | Add route-segment `error/loading/not-found` files and a shared empty-state component | — |
-| B17 | P2 | Frontend/Correctness | Hardcoded status displays that don't reflect real state: settings page shows permanent "connected/enabled" badges with no health API; profile shows a fixed "active" status ignoring `user.is_active`. | `app/admin/settings/page.tsx:12-14`; `app/profile/page.tsx:39` | Misleading operational/account status | Back badges with a health endpoint; render account status from API | — |
+| B16 | P2 · **RESOLVED 2026-07-28** | Frontend/UX | ✅ Fixed (route boundaries). Added `app/error.tsx` (client error boundary with retry), `app/loading.tsx` (Suspense fallback), and `app/not-found.tsx` (404), so uncaught render errors and navigations now have App Router boundaries. | new `frontend/src/app/{error,loading,not-found}.tsx` | No route-level error boundaries; uncaught render errors were unhandled | Done — boundaries added; a shared empty-state component remains a minor follow-up | — |
+| B17 | P2 · **RESOLVED 2026-07-28** | Frontend/Correctness | ✅ Fixed. Profile "account status" is now data-driven from `user.is_active` (newly exposed by `UserSummarySerializer`); the admin settings page checks `/health/ready` live for the PostgreSQL badge and relabels the components it cannot verify honestly ("مُهيّأ"/configured) instead of asserting a fake "connected". | `app/admin/settings/page.tsx`; `app/profile/page.tsx`; `accounts/serializers.py`; `shared/api/types.ts` | Misleading operational/account status | Done | — |
 | B18 | P2 | Tests | Highest-value frontend flows are untested: admin route guard, login (`useLogin`), registration, restriction-assignment flow, and the core `apiFetch`/CSRF/error path (only `abortRequest` is tested). | `shared/api/__tests__/` (abort only); `features/report-generation/__tests__/validateInput.test.ts` | Regressions in auth/admin/restrictions would ship silently | Add tests for the guard, login/registration, restriction flow, and `client.ts` request/error path | B8,B15 |
 | B19 | P2 | Tooling | No `lint` script and no ESLint config; `next build`'s default lint is the only gate. | `frontend/package.json` scripts; no eslint config in repo | Style/quality drift; no enforced FE lint in CI | Add ESLint + a `lint` script and wire into CI/Definition-of-Done | — |
 | B20 | P2 | Security/Auth | Logout blacklists only the refresh token; a captured short-lived access token stays valid until expiry (15 min). | `accounts/views.py:90-104`; `SIMPLE_JWT` at `settings.py:161-167` | Small post-logout window of validity | Accept as documented trade-off, or shorten access lifetime / add a denylist check for high-risk actions | — |
@@ -297,6 +297,29 @@ ends up `QUEUED`; a recent PROCESSING report is left untouched).
 **Verification:** `python manage.py check` — 0 issues. Targeted new tests — 4 passed. Full
 suite: 101 passed, 4 failed (the same pre-existing environmental media-mount
 `PermissionError`s, unrelated to these changes).
+
+## B16 / B17 — Resolution (2026-07-28)
+**B16 (route boundaries):** added `frontend/src/app/error.tsx` (a `'use client'` error
+boundary that logs the error and offers a retry via `reset()`), `app/loading.tsx` (Suspense
+fallback), and `app/not-found.tsx` (styled 404 with a link home). Uncaught render errors and
+missing routes now resolve to proper App Router boundaries instead of failing silently.
+
+**B17 (data-driven status):**
+- Backend: `UserSummarySerializer` now exposes `is_active`; the `UserSummary` TS type mirrors it.
+- Profile: "account status" renders from `user.is_active` (`نشط`/`موقوف`) instead of a hardcoded value.
+- Admin settings: converted to a client component that calls `/health/ready` and shows the
+  PostgreSQL badge from the live `checks.database` result; the components it cannot verify
+  (Celery+Redis, JWT mode) are labelled honestly ("مُهيّأ"/"مُفعّل") rather than a fake
+  "connected".
+
+**Files changed:** `frontend/src/app/{error,loading,not-found}.tsx` (new),
+`frontend/src/app/admin/settings/page.tsx`, `frontend/src/app/profile/page.tsx`,
+`frontend/src/shared/api/types.ts`, `backend/reports/accounts/serializers.py`.
+
+**Verification:** `npm run typecheck` — passed (exit 0). Backend full suite — 101 passed,
+4 failed (the same pre-existing environmental media-mount `PermissionError`s). Note: Vitest
+could not be run in this environment (missing native rollup binary), so the new `.tsx` files
+were validated by `tsc` type-checking and review only.
 
 ## Verification performed
 - `npm run typecheck` (frontend, `tsc --noEmit`) — **passed** (exit 0).
