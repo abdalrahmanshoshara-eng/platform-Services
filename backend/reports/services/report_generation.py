@@ -15,11 +15,11 @@ from .pdf_converter import LibreOfficePDFConverter
 class ReportGenerationService:
     """Produces the DOCX + PDF for a report and persists them via DocumentStorage.
 
-    `produce()` does the work and RAISES on failure (the Celery task owns state).
-    `generate()` is a synchronous convenience wrapper that also manages status.
-    LibreOffice needs real filesystem paths, so rendering happens in a temp dir;
-    final persistence goes through the storage abstraction (no MEDIA_ROOT coupling
-    in the persistence decision).
+    `produce()` does the work and RAISES on failure; the Celery task owns status and
+    sanitizes any error before persisting it (see generation/tasks.py), so raw
+    exception text is never stored or returned to clients. LibreOffice needs real
+    filesystem paths, so rendering happens in a temp dir; final persistence goes
+    through the storage abstraction (no MEDIA_ROOT coupling in the persistence decision).
     """
 
     def __init__(self, report: GeneratedReport, storage=document_storage):
@@ -42,25 +42,6 @@ class ReportGenerationService:
             docx_name = self.storage.save(f"generated_reports/{rid}/{slug}-{rid}.docx", docx_local.read_bytes())
             pdf_name = self.storage.save(f"generated_reports/{rid}/{slug}-{rid}.pdf", pdf_local.read_bytes())
         return docx_name, pdf_name
-
-    def generate(self) -> GeneratedReport:
-        self._set_status(GeneratedReport.Status.PROCESSING)
-        try:
-            docx_name, pdf_name = self.produce()
-            self.report.docx_file.name = docx_name
-            self.report.pdf_file.name = pdf_name
-            self.report.status = GeneratedReport.Status.COMPLETED
-            self.report.error_message = ""
-            self.report.save(update_fields=["docx_file", "pdf_file", "status", "error_message", "updated_at"])
-        except Exception as exc:  # noqa: BLE001
-            self.report.status = GeneratedReport.Status.FAILED
-            self.report.error_message = str(exc)[:4000]
-            self.report.save(update_fields=["status", "error_message", "updated_at"])
-        return self.report
-
-    def _set_status(self, status: str) -> None:
-        self.report.status = status
-        self.report.save(update_fields=["status", "updated_at"])
 
     def _template_file_name(self) -> str:
         version = self.report.template_version

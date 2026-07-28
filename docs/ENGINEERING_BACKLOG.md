@@ -19,8 +19,8 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B10 | P1 · **RESOLVED 2026-07-28** | Security/Auth | ✅ Fixed. Registration now runs Django's configured password validators (length, common-password, numeric-only, similarity to username/email) via `RegisterSerializer.validate()`, not just `min_length=8`. Throttle half was already resolved under B1 (`register` scope + shared cache). | `accounts/serializers.py` `RegisterSerializer` | Weak/common passwords were accepted platform-wide | Done — see "B10 — Resolution" below | B1 (done) |
 | B11 | P2 · **RESOLVED 2026-07-28** | Performance | ✅ Fixed. The per-service loop that issued 3 count queries each is replaced by two grouped aggregations (launch counts by `target_id`+`outcome`, restriction counts by `service_id`), then a single service pass reads from in-memory maps — query count is now flat regardless of service count. | `admin_api/views.py` `AdminAnalyticsView` | `1+3N` queries degraded as catalog/audit grew | Done — see "B11/B12 — Resolution" below | B12 (done) |
 | B12 | P2 · **RESOLVED 2026-07-28** | Performance/Data | ✅ Fixed. Added a composite index `AuditEvent(action, target_type, target_id)` backing the service.launch analytics lookups (migration `0009`). | `models.py` `AuditEvent.Meta.indexes`; migration `0009_auditevent_reports_aud_action_11faf8_idx` | Per-service analytics lookups were unindexed at volume | Done — see "B11/B12 — Resolution" below | — |
-| B13 | P2 | Performance | Services list is effectively N+1 for restricted users: `prefetch_related("user_restrictions",...)` is set but `service_access_for` re-queries `.filter(...).first()` per service instead of using the prefetch. | `services_catalog/views.py:22`; `policy.py:21-27`; `serializers.py:34-38` | One extra query per service on the authenticated list endpoint | Compute restrictions from the prefetched set, or annotate access in the queryset | — |
-| B14 | P2 | Security/Correctness | Dead `ReportGenerationService.generate()` stores raw exception text into `error_message`, which is serialized to clients; unused today but latent. | `services/report_generation.py:46-59`; serialized at `generation/serializers.py:17-32,71-82` | If ever wired to a sync path, leaks internal paths/stderr to users | Delete the dead method or sanitize like `tasks.py`; add a test asserting `error_message` never leaks internals | — |
+| B13 | P2 · **RESOLVED 2026-07-28** | Performance | ✅ Fixed as part of B2: the serializer now calls `access_decisions_for(user, services)` once (two user-scoped queries) and the unused `prefetch_related` was removed, so the list endpoint's query count is flat regardless of service count. | `services_catalog/serializers.py`, `policy.py` (B2); regression test `test_services_list_perf.py` | Was one extra query per service on the authenticated list | Done (via B2) — confirmed with a query-count test | — |
+| B14 | P2 · **RESOLVED 2026-07-28** | Security/Correctness | ✅ Fixed. The dead, unsafe `ReportGenerationService.generate()` (and its `_set_status` helper) that stored `str(exc)` into the client-visible `error_message` were removed; only the raising `produce()` remains, and the Celery task keeps ownership of sanitized status. | `services/report_generation.py`; regression test `test_recover_and_cleanup.py` | If ever wired to a sync path it would have leaked internal paths/stderr | Done — dead method removed; guarded by a test | — |
 | B15 | P2 | Frontend/Architecture | Two parallel API/auth stacks coexist: canonical `@/shared/api`+`@/shared/auth` vs deprecated `@/lib/{api,auth,useRequireAuth}` shims still imported by several report pages. | `lib/api.ts`, `lib/auth.ts` (marked deprecated) imported by `app/reports/page.tsx:8-9`, `app/reports/[id]/page.tsx:9-10`, `app/report-types/page.tsx:6-7` | Inconsistent boundaries; refactor hazard if stubs regain token storage | Finish migration to `@/shared`; delete the shims and orphaned hooks (`features/dashboard/useDashboard.ts`, `features/reports-history/useReports.ts`) | — |
 | B16 | P2 | Frontend/UX | No App Router `error.tsx`/`loading.tsx`/`not-found.tsx` anywhere; every page hand-rolls loading/error state. Empty states are inconsistent (admin `<AdminEmpty>` vs bespoke markup in user pages). | grep: none under `app/`; `app/services/page.tsx:125`, `app/reports/page.tsx:61-63` | No route-level error boundaries; uncaught render errors are unhandled; inconsistent UX | Add route-segment `error/loading/not-found` files and a shared empty-state component | — |
 | B17 | P2 | Frontend/Correctness | Hardcoded status displays that don't reflect real state: settings page shows permanent "connected/enabled" badges with no health API; profile shows a fixed "active" status ignoring `user.is_active`. | `app/admin/settings/page.tsx:12-14`; `app/profile/page.tsx:39` | Misleading operational/account status | Back badges with a health endpoint; render account status from API | — |
@@ -28,7 +28,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B19 | P2 | Tooling | No `lint` script and no ESLint config; `next build`'s default lint is the only gate. | `frontend/package.json` scripts; no eslint config in repo | Style/quality drift; no enforced FE lint in CI | Add ESLint + a `lint` script and wire into CI/Definition-of-Done | — |
 | B20 | P2 | Security/Auth | Logout blacklists only the refresh token; a captured short-lived access token stays valid until expiry (15 min). | `accounts/views.py:90-104`; `SIMPLE_JWT` at `settings.py:161-167` | Small post-logout window of validity | Accept as documented trade-off, or shorten access lifetime / add a denylist check for high-risk actions | — |
 | B21 | P2 | Architecture/Storage | `DocumentStorage` wraps `default_storage` (local `FileField`) but the docstring claims S3 swappability that isn't wired; requirements assume object storage + temporary signed URLs. | `shared/storage.py`; `docker-compose.yml` (no MinIO/S3) | Migration to object storage is unbudgeted; no signed-URL/retention layer | Either implement an S3 backend behind `DocumentStorage` or correct the docs to state local-only | — |
-| B22 | P2 | Correctness/Domain | `recover_stuck_reports` sets `status=FAILED` directly instead of via `transition()`, circumventing the "domain is the only place transitions happen" invariant. | `management/commands/recover_stuck_reports.py:22-26` | Invariant erosion; future transition rules could be skipped by this path | Route the recovery transition through `domain.transition()` | — |
+| B22 | P2 · **RESOLVED 2026-07-28** | Correctness/Domain | ✅ Fixed. `recover_stuck_reports` now moves PROCESSING→FAILED via `domain.transition()` before retrying, upholding the "domain is the only place transitions happen" invariant. | `management/commands/recover_stuck_reports.py`; regression test `test_recover_and_cleanup.py` | Invariant erosion; future transition rules could be skipped | Done | — |
 | B23 | P3 | Frontend/Types | excel-contacts is plain untyped JS in an otherwise strict-TS codebase; throws/consumes untyped `Error` objects. | `lib/excel-contacts/contacts.js:75-125,182-188`; `components/ContactProcessor.js` (298 lines) | Unchecked corner; no type safety for the most intricate FE logic | Port to TypeScript; add unit tests to Vitest (currently only an ad-hoc `test:excel` script) | B7 |
 | B24 | P3 | Docs | Repo docs (`docs/architecture.md`, `docs/api-contracts.md`, ADRs) describe the generic multi-tool platform, not the report-generation implementation. | `docs/` vs verified `CODEBASE_MAP.md` | New contributors are misled about models/flows that don't exist | Reconcile docs with `CODEBASE_MAP.md`; note descoped features explicitly | — |
 | B25 | P3 · **Mostly done** | Security/Headers | `SECURE_HSTS_*`, `SECURE_SSL_REDIRECT`, `SECURE_CONTENT_TYPE_NOSNIFF`, and referrer policy are now configured (under B3, auto-on when `DEBUG` is off). Only a Content-Security-Policy is still missing (needs a CSP middleware/dependency). | `config/settings.py:182-195` | Weaker defense-in-depth in production | Remaining: add a CSP (would introduce a small dependency such as `django-csp`) | B3 (done) |
@@ -272,6 +272,31 @@ new `backend/reports/tests/test_analytics_performance.py`. No frontend changes.
   query count is identical with 2 vs 7 services (proving no per-service growth). Full suite:
   97 passed, 4 failed (the same pre-existing environmental media-mount `PermissionError`s,
   unrelated to B11/B12).
+
+## B13 / B14 / B22 — Resolution (2026-07-28)
+**B13 (services-list N+1):** already fixed by the B2 refactor (`access_decisions_for` does two
+bulk, user-scoped queries; the unused `prefetch_related` was removed). Locked with
+`test_services_list_perf.py`, which asserts the query count is identical for 2 vs 8 services.
+
+**B14 (dead unsafe generate()):** removed `ReportGenerationService.generate()` and
+`_set_status()` — the only path that wrote `str(exc)` into the client-visible `error_message`.
+`produce()` (raises on failure) is the sole entry point; `generation/tasks.py` remains the
+owner of sanitized status. `CLAUDE.md`'s guidance was updated accordingly. Guarded by
+`test_recover_and_cleanup.py::test_unsafe_generate_wrapper_is_removed`.
+
+**B22 (recovery bypassed the state machine):** `recover_stuck_reports` now calls
+`domain.transition(report, FAILED)` before `RetryReportUseCase`, so every transition flows
+through the single source of truth. Verified by `test_recover_and_cleanup.py` (stuck report
+ends up `QUEUED`; a recent PROCESSING report is left untouched).
+
+**Files changed:** `backend/reports/services/report_generation.py`,
+`backend/reports/management/commands/recover_stuck_reports.py`, `CLAUDE.md`, new
+`backend/reports/tests/test_recover_and_cleanup.py`,
+`backend/reports/tests/test_services_list_perf.py`. No migration. No frontend changes.
+
+**Verification:** `python manage.py check` — 0 issues. Targeted new tests — 4 passed. Full
+suite: 101 passed, 4 failed (the same pre-existing environmental media-mount
+`PermissionError`s, unrelated to these changes).
 
 ## Verification performed
 - `npm run typecheck` (frontend, `tsc --noEmit`) — **passed** (exit 0).

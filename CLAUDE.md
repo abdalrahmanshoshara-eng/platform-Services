@@ -49,9 +49,10 @@ frontend/src/
 ## Backend rules
 - One `models.py` owns the schema. No schema change without a migration; never edit or
   delete an existing migration (`0001`–`0008`).
-- Never expose raw exception text to clients. `tasks.py` sanitizes to a safe message; keep
-  it that way (`ReportGenerationService.generate()` in `services/` is dead & unsafe — do
-  not wire it up without sanitizing, see backlog).
+- Never expose raw exception text to clients. `generation/tasks.py` sanitizes generation
+  failures to a safe message before persisting/serializing `error_message`; keep it that
+  way. `ReportGenerationService` exposes only `produce()` (raises on failure) — do not add a
+  path that stores `str(exc)` into `error_message`.
 - Use `DocumentStorage` (`shared/storage.py`); no `FileField.path`/`MEDIA_ROOT` in logic.
 - An HTTP request must never wait for generation — enqueue via
   `transaction.on_commit(... .delay())` and return **202**.
