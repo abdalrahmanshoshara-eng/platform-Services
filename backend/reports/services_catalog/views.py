@@ -16,11 +16,10 @@ class ServiceViewSet(ReadOnlyModelViewSet):
     lookup_field = "slug"
 
     def get_queryset(self):
-        return (
-            Service.objects.filter(is_active=True, category__is_active=True)
-            .select_related("category")
-            .prefetch_related("user_restrictions", "category__user_restrictions")
-        )
+        # Access decisions are computed in a constant number of user-scoped
+        # queries by the policy layer, so no per-service restriction prefetch is
+        # needed here (category is select_related for the disabled-category check).
+        return Service.objects.filter(is_active=True, category__is_active=True).select_related("category")
 
     @action(detail=True, methods=["post"])
     def launch(self, request, slug=None):

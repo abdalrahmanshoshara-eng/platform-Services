@@ -8,7 +8,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | ID | Priority | Area | Finding | Evidence | Impact | Recommended direction | Dependencies |
 | -- | -------- | ---- | ------- | -------- | ------ | --------------------- | ------------ |
 | B1 | P0 | Security/Auth | Login/refresh throttling is not shared across workers — no `CACHES` backend, so DRF throttles use per-process `LocMemCache` while backend runs `gunicorn --workers 3`. Effective login limit ≈ `10/min × workers`. | `config/settings.py` has no `CACHES`; throttle scopes at `settings.py:149-156`; `docker-compose.yml` backend `--workers 3` | Brute-force protection (a stated requirement) is materially weakened in the shipped config | Configure a shared Redis cache backend for throttling; keep `LocMemCache` only for tests | Redis (already present) |
-| B2 | P0 | Security/Admin | Category-level user blocking is a silent no-op: `UserCategoryRestriction` is modeled but no policy, selector, or admin endpoint ever reads/writes it. | `reports/models.py:240-258`; `services_catalog/policy.py:15-29` only reads `service.user_restrictions`; grep finds no other refs | Admins believe a user is blocked from a category while access remains — access-control control that silently fails; fails an acceptance criterion | Enforce category restrictions inside `service_access_for`; add admin bulk create/remove endpoints + tests, or remove the model if unsupported | B7 |
+| B2 | P0 · **RESOLVED 2026-07-28** | Security/Admin | ✅ Fixed. Was: category-level user blocking is a silent no-op — `UserCategoryRestriction` is modeled but no policy, selector, or admin endpoint ever reads/writes it. Now enforced by the centralized policy and manageable via an audited admin endpoint. | `reports/models.py:240-258`; old `services_catalog/policy.py:15-29` only read `service.user_restrictions`; grep found no other refs | Admins believed a user was blocked from a category while access remained — an access-control that silently failed; failed an acceptance criterion | Done — see "B2 — Resolution" below | B7 |
 | B3 | P1 | Security/Config | Insecure production defaults: hardcoded `SECRET_KEY` fallback, `DEBUG` defaults `True`, and `AUTH_COOKIE_SECURE`/`CSRF_COOKIE_SECURE` derive from `DEBUG`; `.env.example` ships `DEBUG=True`. | `config/settings.py:19-24,173,180-181`; `.env.example` | A prod deploy that forgets to flip `DEBUG` serves non-Secure auth cookies + tracebacks | Fail fast if `SECRET_KEY` unset in non-debug; require explicit `DJANGO_DEBUG=False`; add a deploy checklist | — |
 | B4 | P1 | Architecture/Admin | Audited enable/disable is bypassable: generic `PATCH` on admin Service/ReportType viewsets and `list_editable`/editable fields in Django `admin.py` flip `is_active`/`status` directly, skipping the `activate`/`deactivate` actions that set `disabled_by/at` and write audit. | `admin_api/views.py:180-227,282-309`; `admin_api/serializers.py:81-101`; `admin.py:29-34,54-60` | Services/templates disabled with no audit trail or metadata; audit integrity gap | Make `is_active`/`status` read-only on the generic serializers; route state changes only through audited actions; lock down Django admin editable fields | — |
 | B5 | P1 | Architecture/Validation | `ReportType.fields_schema` is editable via `AdminReportTypeViewSet` with no schema validation; `validate_fields_schema` runs only inside a use case that has no HTTP entry point. | `admin_api/views.py:282-309`; `admin_api/serializers.py:148-157`; `catalog/validation.py`; `catalog/application.py:20-47` | Invalid schemas (dup names, `select` w/o options) persist and break the user form/generation | Call `validate_fields_schema` in the admin serializer `validate()`; add API-level test | B6 |
@@ -33,6 +33,54 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B24 | P3 | Docs | Repo docs (`docs/architecture.md`, `docs/api-contracts.md`, ADRs) describe the generic multi-tool platform, not the report-generation implementation. | `docs/` vs verified `CODEBASE_MAP.md` | New contributors are misled about models/flows that don't exist | Reconcile docs with `CODEBASE_MAP.md`; note descoped features explicitly | — |
 | B25 | P3 | Security/Headers | No security headers/CSP configured (`SecurityMiddleware` present but no HSTS/SSL-redirect/CSP settings), despite requirements asking for them. | `config/settings.py` (no `SECURE_*`/CSP) | Weaker defense-in-depth in production | Add `SECURE_HSTS_*`, `SECURE_SSL_REDIRECT`, referrer policy, and a CSP (env-gated for prod) | B3 |
 | B26 | P3 | Verification | `Needs verification`: backend `manage.py check`/`pytest` and frontend Vitest could not be run in the audit sandbox (backend deps not installed / Windows `.venv`; frontend `node_modules` missing the Linux `@rollup/rollup-linux-x64-gnu` native binary). Only `npm run typecheck` was executed (passed). | See "Verification" note below | Backend test suite health unconfirmed by this audit | Run the full Definition-of-Done on a matched platform / CI | — |
+
+## B2 — Resolution (2026-07-28)
+**Status:** Resolved (verified re-trace + fix + tests).
+
+**Root cause:** `service_access_for` in `services_catalog/policy.py` only queried
+`UserServiceRestriction` (direct service restrictions). `UserCategoryRestriction` was never
+read by the policy and had no create/remove admin endpoint, so category-level blocking was
+inert. The service catalog even prefetched `category__user_restrictions` but the policy
+never used it.
+
+**Fix:**
+- Rewrote the centralized policy into a single decision function plus a bulk
+  `access_decisions_for(user, services)` that resolves in a constant number of user-scoped
+  queries (avoids N+1 on the services list). Decisions now account for: account disabled,
+  service/category disabled, staff-only, active direct service restriction, and active
+  **category** restriction, returning a stable `code`
+  (`ACCOUNT_DISABLED`/`SERVICE_DISABLED`/`STAFF_ONLY`/`SERVICE_RESTRICTION`/
+  `CATEGORY_RESTRICTION`/`ALLOWED`). Expired restrictions are excluded by the active-window
+  filter and are never deleted during evaluation; checks are timezone-aware.
+- Serializer now computes all list decisions once via `access_decisions_for`; removed the
+  now-unused `prefetch_related` on the catalog queryset (kept `select_related("category")`).
+- Added an audited, atomic, admin-only endpoint mirroring the existing service-restriction
+  action: `POST /api/v1/admin/users/{id}/category-restrictions/` (`mode` add|remove,
+  `category_ids[]`, optional `reason`, optional `expires_at`). Duplicates are deterministic
+  via `update_or_create` on the existing `unique_together(user, category)`; all category IDs
+  are validated before the atomic block, and one `AuditEvent`
+  (`admin.category_restrictions.{mode}`) summarizes each operation.
+
+**Files changed:** `backend/reports/services_catalog/policy.py`,
+`backend/reports/services_catalog/serializers.py`,
+`backend/reports/services_catalog/views.py`, `backend/reports/admin_api/views.py`,
+new `backend/reports/tests/test_category_restrictions.py`. No migration needed (model,
+fields, and `unique_together` already existed). No frontend changes.
+
+**Verification (SQLite test settings):**
+- `python manage.py check` — 0 issues.
+- `python manage.py makemigrations --check --dry-run` — No changes detected.
+- `pytest test_category_restrictions.py test_admin_control_center.py test_service_catalog.py`
+  — 26 passed (14 new B2 tests + 12 existing).
+- Full suite: 73 passed, 4 failed — the 4 failures are pre-existing and environmental
+  (`PermissionError: Operation not permitted` deleting files on the sandbox media mount, in
+  `test_storage_downloads.py` / `test_report_generation_characterization.py`), unrelated to B2.
+
+**Remaining limitation:** `AdminUserDetailSerializer.get_restrictions` still lists only
+service restrictions, so category restrictions aren't surfaced in the user-detail payload
+(enforcement and management work regardless); surfacing them is a small follow-up. The two
+requirements docs still describe multi-user bulk endpoints — this fix follows the existing
+per-user restriction pattern instead.
 
 ## Verification performed
 - `npm run typecheck` (frontend, `tsc --noEmit`) — **passed** (exit 0).
