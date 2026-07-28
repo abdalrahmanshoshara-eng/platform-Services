@@ -3,15 +3,17 @@
 All browser requests use HttpOnly JWT cookies. Unsafe requests also require the CSRF
 cookie value in `X-CSRFToken`. Admin endpoints require an authenticated staff or
 superuser account and return `403` for regular users.
+`/api/v1/` is canonical. The corresponding `/api/...` application paths are deprecated
+compatibility aliases and must not be used by new clients.
 
 ## Authentication
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/auth/login/` | Create cookie session |
-| GET | `/api/auth/me/` | Current user |
-| POST | `/api/auth/refresh/` | Rotate session |
-| POST | `/api/auth/logout/` | Revoke and clear session |
+| POST | `/api/v1/auth/login/` | Create cookie session |
+| GET | `/api/v1/auth/me/` | Current user |
+| POST | `/api/v1/auth/refresh/` | Rotate session |
+| POST | `/api/v1/auth/logout/` | Revoke and clear session |
 
 ## Admin dashboard and analytics
 

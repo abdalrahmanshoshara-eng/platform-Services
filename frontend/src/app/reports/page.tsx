@@ -6,6 +6,7 @@ import DownloadButton from '@/components/DownloadButton';
 import PageHero from '@/components/PageHero';
 import StatusBadge from '@/components/StatusBadge';
 import { apiFetch as fetchApi } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { GeneratedReport, PaginatedResponse } from '@/shared/api/types';
 import { useRequireAuth } from '@/shared/auth/useRequireAuth';
 
@@ -16,7 +17,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (!ready) return;
-    fetchApi<PaginatedResponse<GeneratedReport> | GeneratedReport[]>('/reports/')
+    fetchApi<PaginatedResponse<GeneratedReport> | GeneratedReport[]>(API_ENDPOINTS.reports.list)
       .then((data) => setReports(Array.isArray(data) ? data : data.results))
       .catch((err) => setError(err instanceof Error ? err.message : 'تعذر تحميل سجل التقارير.'));
   }, [ready]);

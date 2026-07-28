@@ -5,7 +5,7 @@
 cp .env.example .env         # edit secrets; never commit .env
 docker compose up --build    # db, redis, backend (gunicorn), worker (celery), frontend
 ```
-- Frontend: http://localhost:3000 · API: http://localhost:8000/api · Admin: /admin
+- Frontend: http://localhost:3000 · API: http://localhost:8000/api/v1 · Admin: /admin
 - Health: `GET /health/live`, `GET /health/ready`.
 
 ## First-time data (explicit; never automatic)

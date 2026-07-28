@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { AdminEmpty, AdminHeader, Pagination, StatusBadge } from '@/components/admin/AdminUI';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import { useAdminList } from '@/shared/admin/useAdminList';
 import type { AdminService } from '@/shared/api/types';
 
@@ -18,13 +19,13 @@ export default function AdminServicesPage() {
   const [actionError, setActionError] = useState('');
   const [saving, setSaving] = useState(false);
   const query = useMemo(() => new URLSearchParams({ search, status, kind, page: String(page) }).toString(), [search, status, kind, page]);
-  const { data, loading, error, reload } = useAdminList<AdminService>('/v1/admin/services/', query);
+  const { data, loading, error, reload } = useAdminList<AdminService>(API_ENDPOINTS.admin.services, query);
 
   async function toggleService(service: AdminService) {
     setSaving(true);
     setActionError('');
     try {
-      await apiFetch(`/v1/admin/services/${service.id}/${service.is_active ? 'deactivate' : 'activate'}/`, {
+      await apiFetch(API_ENDPOINTS.admin.serviceAction(service.id, service.is_active ? 'deactivate' : 'activate'), {
         method: 'POST',
         body: { reason },
       });

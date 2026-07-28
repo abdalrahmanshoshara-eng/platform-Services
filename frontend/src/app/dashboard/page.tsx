@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import StatusBadge from '@/components/StatusBadge';
 import { abortRequest, apiFetch, isAbortError } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { DashboardStats, PlatformService } from '@/shared/api/types';
 import { useAuth } from '@/shared/auth/AuthContext';
 import { useRequireAuth } from '@/shared/auth/useRequireAuth';
@@ -29,8 +30,8 @@ export default function DashboardPage() {
     if (!ready) return;
     const controller = new AbortController();
     Promise.all([
-      apiFetch<DashboardStats>('/dashboard/stats/', { signal: controller.signal }),
-      apiFetch<PlatformService[]>('/services/', { signal: controller.signal }),
+      apiFetch<DashboardStats>(API_ENDPOINTS.dashboard.stats, { signal: controller.signal }),
+      apiFetch<PlatformService[]>(API_ENDPOINTS.services.list, { signal: controller.signal }),
     ])
       .then(([dashboard, catalog]) => {
         if (controller.signal.aborted) return;

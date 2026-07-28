@@ -4,6 +4,7 @@ import { ContactRound, FileText, PanelsTopLeft, Sheet, type LucideIcon } from 'l
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { abortRequest, apiFetch, isAbortError } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { PlatformService, ServiceLaunch } from '@/shared/api/types';
 import { useRequireAuth } from '@/shared/auth/useRequireAuth';
 
@@ -25,7 +26,7 @@ export default function ServicesPage() {
   useEffect(() => {
     if (!ready) return;
     const controller = new AbortController();
-    apiFetch<PlatformService[]>('/services/', { signal: controller.signal })
+    apiFetch<PlatformService[]>(API_ENDPOINTS.services.list, { signal: controller.signal })
       .then((catalog) => {
         if (!controller.signal.aborted) setServices(catalog);
       })
@@ -60,7 +61,7 @@ export default function ServicesPage() {
     setLaunching(service.slug);
     setError('');
     try {
-      const launchInfo = await apiFetch<ServiceLaunch>(`/services/${service.slug}/launch/`, { method: 'POST' });
+      const launchInfo = await apiFetch<ServiceLaunch>(API_ENDPOINTS.services.launch(service.slug), { method: 'POST' });
       if (launchInfo.kind === 'external') {
         window.open(launchInfo.target, '_blank', 'noopener,noreferrer');
       } else {

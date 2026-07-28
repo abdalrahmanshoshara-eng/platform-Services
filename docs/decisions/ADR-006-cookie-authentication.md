@@ -9,7 +9,7 @@ JWTs were stored in `localStorage` (XSS-exposed) and returned in the login body.
 ## Decision
 Store access + refresh tokens in **HttpOnly cookies**. `CookieJWTAuthentication` reads the
 access cookie (header still allowed for tooling) and enforces CSRF on unsafe methods. Short
-access lifetime; refresh rotation with blacklist via `/api/auth/refresh/`. Logout blacklists
+access lifetime; refresh rotation with blacklist via `/api/v1/auth/refresh/`. Logout blacklists
 and clears cookies. Tokens are never in the response body or JS-readable.
 
 ## Consequences

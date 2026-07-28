@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      await apiFetch('/auth/register/', {
+      await apiFetch(API_ENDPOINTS.auth.register, {
         method: 'POST',
         body: { username, email, password },
       });

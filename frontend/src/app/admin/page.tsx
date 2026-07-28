@@ -5,6 +5,7 @@ import { Activity, Boxes, CircleAlert, FileStack, ListChecks, Users } from 'luci
 import { useEffect, useState } from 'react';
 import { AdminHeader, StatusBadge } from '@/components/admin/AdminUI';
 import { abortRequest, apiFetch, isAbortError } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { AdminDashboard } from '@/shared/api/types';
 
 export default function AdminDashboardPage() {
@@ -13,7 +14,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch<AdminDashboard>('/v1/admin/dashboard/', { signal: controller.signal })
+    apiFetch<AdminDashboard>(API_ENDPOINTS.admin.dashboard, { signal: controller.signal })
       .then(setData)
       .catch((err) => {
         if (!isAbortError(err, controller.signal)) setError(err instanceof Error ? err.message : 'تعذر تحميل لوحة الإدارة.');

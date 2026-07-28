@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type {
   AdminReportType,
   AdminTemplateVersion,
@@ -64,7 +65,7 @@ export default function ReportTemplatesManager() {
     setLoading(true);
     try {
       const data = await apiFetch<PaginatedResponse<AdminReportType>>(
-        '/v1/admin/report-types/?ordering=name',
+        `${API_ENDPOINTS.admin.reportTypes}?ordering=name`,
       );
       setItems(data.results);
     } catch (err) {
@@ -77,7 +78,7 @@ export default function ReportTemplatesManager() {
   async function loadVersions(reportTypeId: number) {
     try {
       const data = await apiFetch<AdminTemplateVersion[]>(
-        `/v1/admin/report-types/${reportTypeId}/template-versions/`,
+        API_ENDPOINTS.admin.templateVersions(reportTypeId),
       );
       setVersions(data);
     } catch (err) {
@@ -111,8 +112,8 @@ export default function ReportTemplatesManager() {
         throw new Error('مخطط الحقول يجب أن يكون مصفوفة JSON.');
       }
       const path = draft.id
-        ? `/v1/admin/report-types/${draft.id}/`
-        : '/v1/admin/report-types/';
+        ? API_ENDPOINTS.admin.reportType(draft.id)
+        : API_ENDPOINTS.admin.reportTypes;
       await apiFetch(path, {
         method: draft.id ? 'PATCH' : 'POST',
         body: {
@@ -137,7 +138,7 @@ export default function ReportTemplatesManager() {
     if (!window.confirm(`هل تريد ${verb} نوع التقرير «${item.name}»؟`)) return;
     setError('');
     try {
-      await apiFetch(`/v1/admin/report-types/${item.id}/`, {
+      await apiFetch(API_ENDPOINTS.admin.reportType(item.id), {
         method: 'PATCH',
         body: { is_active: !item.is_active },
       });
@@ -166,7 +167,7 @@ export default function ReportTemplatesManager() {
     setSaving(true);
     setError('');
     try {
-      await apiFetch(`/v1/admin/report-types/${selectedId}/template-versions/`, {
+      await apiFetch(API_ENDPOINTS.admin.templateVersions(selectedId), {
         method: 'POST',
         body: form,
       });
@@ -186,7 +187,7 @@ export default function ReportTemplatesManager() {
     setError('');
     try {
       await apiFetch(
-        `/v1/admin/report-types/${selectedId}/template-versions/${version.id}/${action}/`,
+        API_ENDPOINTS.admin.templateVersionAction(selectedId, version.id, action),
         { method: 'POST', body: { reason: `إجراء من لوحة الإدارة: ${label}` } },
       );
       await Promise.all([loadVersions(selectedId), load()]);

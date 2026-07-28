@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import ReportTemplatesManager from '@/components/admin/ReportTemplatesManager';
 import { AdminHeader, StatusBadge } from '@/components/admin/AdminUI';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { AdminService } from '@/shared/api/types';
 
 type ServiceDraft = {
@@ -50,7 +51,7 @@ export default function AdminServiceDetailPage() {
   }
 
   useEffect(() => {
-    apiFetch<AdminService>(`/v1/admin/services/${id}/`).then(hydrate).catch((err) => setError(err instanceof Error ? err.message : 'تعذر تحميل الخدمة.'));
+    apiFetch<AdminService>(API_ENDPOINTS.admin.service(id)).then(hydrate).catch((err) => setError(err instanceof Error ? err.message : 'تعذر تحميل الخدمة.'));
   }, [id]);
 
   async function toggleService() {
@@ -59,7 +60,7 @@ export default function AdminServiceDetailPage() {
     setError('');
     try {
       const action = service.is_active ? 'deactivate' : 'activate';
-      hydrate(await apiFetch<AdminService>(`/v1/admin/services/${id}/${action}/`, {
+      hydrate(await apiFetch<AdminService>(API_ENDPOINTS.admin.serviceAction(id, action), {
         method: 'POST',
         body: { reason: disableReason },
       }));
@@ -80,7 +81,7 @@ export default function AdminServiceDetailPage() {
     setSuccess('');
     try {
       const parsedSettings = JSON.parse(draft.settings);
-      hydrate(await apiFetch<AdminService>(`/v1/admin/services/${id}/`, {
+      hydrate(await apiFetch<AdminService>(API_ENDPOINTS.admin.service(id), {
         method: 'PATCH',
         body: {
           name: draft.name,

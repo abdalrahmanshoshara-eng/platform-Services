@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import { ApiError, toMessage } from '@/shared/errors/apiError';
 import type { FieldSchema, GeneratedReport } from '@/shared/api/types';
 
@@ -26,7 +27,7 @@ export function useCreateReport() {
     setFieldErrors({});
     try {
       // 202 Accepted — generation runs in the background; caller polls status.
-      return await apiFetch<GeneratedReport>('/reports/', {
+      return await apiFetch<GeneratedReport>(API_ENDPOINTS.reports.list, {
         method: 'POST',
         body: { report_type_id: reportTypeId, title, input_data: inputData },
       });

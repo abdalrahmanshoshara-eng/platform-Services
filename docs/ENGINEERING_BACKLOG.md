@@ -9,10 +9,9 @@ architecture blocking safe development · **P2** important maintainability/perf/
 
 ## Next execution order
 
-1. **B9 — API versioning:** define the compatibility/alias window, then version the public API.
-2. **B18 — Frontend regression tests:** cover auth, admin gating, restrictions, and `apiFetch`.
-3. **B26 — Environment verification:** run the full stack against Docker/PostgreSQL/Redis/Celery.
-4. **B23 — Optional cleanup:** migrate the remaining Excel Contacts UI component to TypeScript.
+1. **B18 — Frontend regression tests:** cover auth, admin gating, restrictions, and `apiFetch`.
+2. **B26 — Environment verification:** run the full stack against Docker/PostgreSQL/Redis/Celery.
+3. **B23 — Optional cleanup:** migrate the remaining Excel Contacts UI component to TypeScript.
 
 | ID | Priority | Area | Finding | Evidence | Impact | Recommended direction | Dependencies |
 | -- | -------- | ---- | ------- | -------- | ------ | --------------------- | ------------ |
@@ -24,7 +23,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B6 | P1 · **RESOLVED 2026-07-28** | Architecture/Security | ✅ Fixed. Template versions now have admin-only upload/list/detail and audited validate/activate/deactivate/archive actions. Uploads use randomized storage keys and bounded DOCX scanning; activation is transactional and DB-constrained to one active version; generation requires and preserves the active validated snapshot. | `catalog/{application,security}.py`; `services/template_storage.py`; `admin_api/{views,serializers,urls}.py`; migration `0010`; Admin UI | Runtime template management and upload security are now enforced end-to-end. | Done — see "B6 — Resolution" below | — |
 | B7 | P1 · **RESOLVED 2026-07-28** | Security/Frontend | ✅ Confirmed and fixed. The unauthenticated Next route was the processing/security boundary. Processing now flows through authenticated `POST /api/tools/excel-contacts/process/` → input serializer → focused use case → centralized `service_access_for` → bounded workbook processor → audited in-memory response. | Added `backend/reports/excel_contacts/*` + focused tests; updated URL/settings/audit/dependencies/docs; Frontend now calls the canonical shared API from `features/excel-contacts/api.ts`; deleted the Next route and duplicate JS processor. | Authentication, active account/service/category, direct/category restrictions, file signature/size/dimension limits, safe errors, formula-safe exports, and `service.execute` audit are enforced server-side. | Done — synchronous mode preserves the immediate UI contract (10 MiB/10k-row bounds); old `/api/excel-contacts/process` Next route intentionally removed with no repository callers; 16 Backend B7 tests + policy tests and 4 Frontend tests pass. No Job/Asset migration because neither generic model exists; results are not retained. | — |
 | B8 | P1 · **ACCEPTED TRADE-OFF** | Security/Frontend | The `/admin` route gate remains client-side, while authorization is deliberately enforced at the API boundary. | `AdminChrome.tsx`; every class in `admin_api/views.py` declares `IsPlatformAdmin`; ADR-009 states the backend remains authoritative. | An unauthorized client can briefly render the loading/redirect state and issue requests that the backend rejects; there is no demonstrated privilege bypass. | Keep backend authorization as the security boundary. Edge middleware is optional UX/defense-in-depth, not required remediation. | — |
-| B9 | P1 · **OPEN** | API/Consistency | Public auth/report/service endpoints remain under `/api/`, while admin endpoints use `/api/v1/admin/`. | `config/urls.py:18-19`; current frontend and `api-contracts.md` consume both forms. | Contract evolution and client migration remain harder than necessary. | Add `/api/v1/` public aliases first, document a compatibility window, then retire unversioned routes separately. | — |
+| B9 | P1 · **RESOLVED 2026-07-28** | API/Consistency | ✅ Fixed. Public auth/report/service/tool routes were under `/api/` while admin used `/api/v1/admin/`; all application APIs are now canonical under `/api/v1/`. Existing `/api/...` routes remain deprecated aliases to the same URLConf/views, isolated in a legacy namespace so normal reverse lookups and schema inventory stay canonical. | `config/{urls,api_urls}.py`; Frontend `shared/api/{client,endpoints}.ts`; API docs and focused route tests. | New clients have one evolvable contract without breaking existing callers; health remains unversioned. | Done — see "B9 — Resolution" below. Remove aliases only after consumers migrate; no removal date is scheduled. | — |
 | B10 | P1 · **RESOLVED 2026-07-28** | Security/Auth | ✅ Fixed. Registration now runs Django's configured password validators (length, common-password, numeric-only, similarity to username/email) via `RegisterSerializer.validate()`, not just `min_length=8`. Throttle half was already resolved under B1 (`register` scope + shared cache). | `accounts/serializers.py` `RegisterSerializer` | Weak/common passwords were accepted platform-wide | Done — see "B10 — Resolution" below | — |
 | B11 | P2 · **RESOLVED 2026-07-28** | Performance | ✅ Fixed. The per-service loop that issued 3 count queries each is replaced by two grouped aggregations (launch counts by `target_id`+`outcome`, restriction counts by `service_id`), then a single service pass reads from in-memory maps — query count is now flat regardless of service count. | `admin_api/views.py` `AdminAnalyticsView` | `1+3N` queries degraded as catalog/audit grew | Done — see "B11/B12 — Resolution" below | — |
 | B12 | P2 · **RESOLVED 2026-07-28** | Performance/Data | ✅ Fixed. Added a composite index `AuditEvent(action, target_type, target_id)` backing the service.launch analytics lookups (migration `0009`). | `models.py` `AuditEvent.Meta.indexes`; migration `0009_auditevent_reports_aud_action_11faf8_idx` | Per-service analytics lookups were unindexed at volume | Done — see "B11/B12 — Resolution" below | — |
@@ -357,10 +356,33 @@ missing routes now resolve to proper App Router boundaries instead of failing si
 could not be run in this environment (missing native rollup binary), so the new `.tsx` files
 were validated by `tsc` type-checking and review only.
 
+## B9 — Resolution (2026-07-28)
+
+**Status:** Resolved. The previous split (`/api/...` for user APIs and
+`/api/v1/admin/...` for admin) is replaced by canonical `/api/v1/...` routes. Temporary
+deprecated `/api/...` aliases include the same URLConf under `legacy_api`; they therefore
+share views, serializers, permissions, and business logic. Ordinary route names/reverses
+produce v1 URLs, and `canonical_api_urlpatterns` excludes aliases from schema enumeration
+to prevent duplicate paths/operation IDs. Health checks remain `/health/live` and
+`/health/ready`.
+
+**Files changed:** `backend/config/{api_urls,urls}.py`, focused B9 Backend tests,
+Frontend `shared/api/{client,endpoints}.ts` and active call sites/config, focused Frontend
+tests, `.env.example`, `docker-compose.yml`, `README.md`, and current API/architecture/
+operations/security docs. No model, migration, payload, authentication, or authorization
+change.
+
+**Verification:** Django check and migration-drift check passed; 51 focused Backend tests
+and the full 157-test SQLite suite passed; B9 Ruff/Black checks passed. Frontend typecheck,
+12 Vitest tests, production build, and lint passed (zero errors; four existing warnings).
+No OpenAPI endpoint was configured before B9; the canonical-only DRF schema input now
+confirms `/api/v1/` paths with unique generated callback/action operation IDs. Alias removal
+remains future work after consumer migration; no date is scheduled.
+
 ## Latest verification status
 - Backend: `manage.py check` passed; `makemigrations --check --dry-run` reported no drift;
-  **148 SQLite tests passed**.
-- Frontend: typecheck passed; **11 Vitest tests passed**; lint completed with zero errors
+  **157 SQLite tests passed**.
+- Frontend: typecheck passed; **12 Vitest tests passed**; lint completed with zero errors
   (four existing warnings); production build passed.
 - Quality gates: B6-scoped Ruff/Black checks passed. Repository-wide Ruff/Black still report
   one existing B904 lint finding and formatting drift in five pre-existing files.

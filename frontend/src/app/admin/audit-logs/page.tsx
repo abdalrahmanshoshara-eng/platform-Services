@@ -5,13 +5,14 @@ import { useMemo, useState } from 'react';
 import { AdminEmpty, AdminHeader, Pagination, StatusBadge } from '@/components/admin/AdminUI';
 import { useAdminList } from '@/shared/admin/useAdminList';
 import type { AuditEvent } from '@/shared/api/types';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 
 export default function AdminAuditPage() {
   const [search, setSearch] = useState('');
   const [outcome, setOutcome] = useState('');
   const [page, setPage] = useState(1);
   const query = useMemo(() => new URLSearchParams({ search, outcome, page: String(page) }).toString(), [search, outcome, page]);
-  const { data, loading, error } = useAdminList<AuditEvent>('/v1/admin/audit-logs/', query);
+  const { data, loading, error } = useAdminList<AuditEvent>(API_ENDPOINTS.admin.auditLogs, query);
   return (
     <main className="admin-content">
       <AdminHeader title="سجل التدقيق" description="سجل غير قابل للتعديل للعمليات الأمنية والإدارية الحساسة." />

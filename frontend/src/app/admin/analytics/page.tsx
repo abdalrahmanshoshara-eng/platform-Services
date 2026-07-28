@@ -4,6 +4,7 @@ import { BarChart3, FileCheck2, ShieldBan } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AdminHeader } from '@/components/admin/AdminUI';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 
 type Analytics = {
   period_days: number;
@@ -18,7 +19,7 @@ export default function AdminAnalyticsPage() {
   const [error, setError] = useState('');
   useEffect(() => {
     setData(null);
-    apiFetch<Analytics>(`/v1/admin/analytics/?days=${days}`).then(setData).catch((err) => setError(err instanceof Error ? err.message : 'تعذر تحميل التحليلات.'));
+    apiFetch<Analytics>(API_ENDPOINTS.admin.analytics(days)).then(setData).catch((err) => setError(err instanceof Error ? err.message : 'تعذر تحميل التحليلات.'));
   }, [days]);
 
   const maximum = Math.max(1, ...(data?.daily_reports.map((item) => item.total) || [1]));

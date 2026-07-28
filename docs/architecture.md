@@ -91,6 +91,9 @@ is redirected to `/admin` after login; non-admin users are redirected to `/dashb
 
 ## Admin control center
 
+All application endpoints use the canonical `/api/v1/` namespace. Temporary `/api/...`
+aliases resolve to the same views for backward compatibility and are excluded from the
+canonical schema route inventory. Infrastructure health routes remain unversioned.
 Administrative endpoints live under `/api/v1/admin/` and share the
 `IsPlatformAdmin` permission. The admin API owns operational reads and audited,
 transactional administrative writes:
@@ -168,15 +171,15 @@ graph LR
 sequenceDiagram
   participant U as Browser (SPA)
   participant A as API
-  U->>A: POST /api/auth/login/ (username, password)
+  U->>A: POST /api/v1/auth/login/ (username, password)
   A-->>U: 200 + Set-Cookie access_token, refresh_token (HttpOnly) + csrftoken
-  U->>A: GET /api/auth/me/ (cookies)
+  U->>A: GET /api/v1/auth/me/ (cookies)
   A-->>U: 200 user
   U->>A: unsafe request (cookies + X-CSRFToken)
   A->>A: CookieJWTAuthentication + CSRF check
-  U->>A: POST /api/auth/refresh/ (refresh cookie)
+  U->>A: POST /api/v1/auth/refresh/ (refresh cookie)
   A-->>U: 200 + rotated cookies (old refresh blacklisted)
-  U->>A: POST /api/auth/logout/
+  U->>A: POST /api/v1/auth/logout/
   A-->>U: 200 + cleared cookies (refresh blacklisted)
 ```
 
@@ -189,7 +192,7 @@ sequenceDiagram
   participant UC as CreateReportUseCase
   participant DB as PostgreSQL
   participant Q as Celery/Redis
-  U->>V: POST /api/reports/
+  U->>V: POST /api/v1/reports/
   V->>UC: execute(user, validated_data)
   UC->>UC: validate_report_input(active_version schema)
   UC->>DB: create report (pending -> queued)
@@ -214,7 +217,7 @@ sequenceDiagram
 
 ## 16. Polling flow
 
-The SPA `useReportStatus` polls `GET /api/reports/{id}/status/` every ~2s, stops on
+The SPA `useReportStatus` polls `GET /api/v1/reports/{id}/status/` every ~2s, stops on
 `completed/failed/cancelled`, cleans up on unmount, and backs off (bounded) on transient
 network errors. No WebSockets.
 
@@ -249,7 +252,7 @@ retain that version through `PROTECT`, including after it is deactivated or arch
 
 ## 19. Secure file download flow
 
-`GET /api/reports/{id}/download-docx|download-pdf` → object permission (`IsOwnerOrAdmin`) →
+`GET /api/v1/reports/{id}/download-docx|download-pdf` → object permission (`IsOwnerOrAdmin`) →
 existence check via `DocumentStorage.exists` → stream via `DocumentStorage.open` with a
 sanitized `Content-Disposition` filename. No public/static file URLs.
 
@@ -361,7 +364,7 @@ See `docs/decisions/` — ADR-001…ADR-008.
 
 ## 37. Excel Contacts processing flow
 
-`POST /api/tools/excel-contacts/process/` authenticates with the normal cookie/CSRF
+`POST /api/v1/tools/excel-contacts/process/` authenticates with the normal cookie/CSRF
 boundary, resolves the `whatsapp-contacts` service, and delegates authorization to
 `services_catalog.policy.service_access_for`. A focused use case validates the upload
 and invokes the bounded workbook processor. The synchronous response preserves the

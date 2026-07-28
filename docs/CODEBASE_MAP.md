@@ -69,21 +69,21 @@ Feature boundaries: `shared/api/client.ts` (fetch + CSRF + error normalization),
 sequenceDiagram
   participant FE as Frontend
   participant BE as Django/DRF
-  FE->>BE: POST /api/auth/login/ {identifier,password}
+  FE->>BE: POST /api/v1/auth/login/ {identifier,password}
   BE->>BE: UsernameOrEmailBackend authenticates
   BE-->>FE: Set-Cookie access_token+refresh_token (HttpOnly) + csrftoken
-  FE->>BE: GET /api/auth/me/ (cookie)
+  FE->>BE: GET /api/v1/auth/me/ (cookie)
   FE->>BE: unsafe request + X-CSRFToken header
-  FE->>BE: POST /api/auth/refresh/ (rotate + blacklist old)
-  FE->>BE: POST /api/auth/logout/ (blacklist refresh)
+  FE->>BE: POST /api/v1/auth/refresh/ (rotate + blacklist old)
+  FE->>BE: POST /api/v1/auth/logout/ (blacklist refresh)
 ```
-Access token lifetime 15 min, refresh 7 days. Note: auth/report endpoints are **unversioned**
-(`/api/...`); only admin is versioned (`/api/v1/admin/...`).
+Access token lifetime 15 min, refresh 7 days. `/api/v1/...` is canonical for all
+application APIs; `/api/...` remains a temporary deprecated compatibility alias.
 
 ## Internal report (job) execution flow
 ```mermaid
 flowchart LR
-  A[POST /api/reports/] --> B[CreateReportUseCase]
+  A[POST /api/v1/reports/] --> B[CreateReportUseCase]
   B --> C[GeneratedReport: PENDING]
   C --> D[on_commit: generate_report_task.delay]
   A -->|202 Accepted| FE
@@ -91,20 +91,20 @@ flowchart LR
   E --> F[render DOCX docxtpl -> PDF LibreOffice]
   F --> G[transition COMPLETED, store docx/pdf FileField]
   F -->|error| H[transition FAILED, safe message, retry up to REPORT_MAX_ATTEMPTS]
-  FE -->|poll GET /api/reports/id/| G
+  FE -->|poll GET /api/v1/reports/id/| G
 ```
 State machine (`domain.py ALLOWED_TRANSITIONS`) is the only place transitions occur.
 There is no generic Job/Asset model — job fields live on `GeneratedReport`.
 
 ## External-service launch flow
-`POST /api/services/{slug}/launch/` → checks access via `service_access_for` → writes an
+`POST /api/v1/services/{slug}/launch/` → checks access via `service_access_for` → writes an
 `AuditEvent` `service.launch` → returns `{target, kind}`. Frontend performs the redirect.
 Open-redirect is mitigated at write time: `Service.clean()` requires external targets to be
 HTTPS and internal targets to start with `/`; users never supply the URL. Usage analytics
 are reconstructed from `AuditEvent` rows (there is no `ServiceUsageEvent` table).
 
 ## Excel Contacts execution flow
-`POST /api/tools/excel-contacts/process/` authenticates via the normal cookie/CSRF
+`POST /api/v1/tools/excel-contacts/process/` authenticates via the normal cookie/CSRF
 boundary, then the focused use case resolves `whatsapp-contacts` and calls
 `service_access_for`. A size/signature/dimension-bounded synchronous processor reads the
 first worksheet, returns the existing ZIP/summary/preview shape, and records
@@ -143,4 +143,5 @@ expiry/retention job.
 - Template versions are managed through admin-only nested endpoints. Uploads use randomized
   storage keys and bounded DOCX scanning; report creation requires the sole active,
   checksummed version and stores that immutable snapshot.
-- **API versioning is inconsistent** — admin is `/api/v1/`, auth/reports are `/api/`.
+- `/api/...` application aliases are deprecated compatibility routes; new callers use
+  canonical `/api/v1/...`. Health endpoints remain unversioned.

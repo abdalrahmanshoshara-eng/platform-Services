@@ -4,6 +4,7 @@ import { RefreshCw, Search, Square } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AdminEmpty, AdminHeader, Pagination, StatusBadge } from '@/components/admin/AdminUI';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { AdminJob } from '@/shared/api/types';
 import { useAdminList } from '@/shared/admin/useAdminList';
 
@@ -15,11 +16,11 @@ export default function AdminJobsPage() {
   const [page, setPage] = useState(1);
   const [actionError, setActionError] = useState('');
   const query = useMemo(() => new URLSearchParams({ search, status, page: String(page) }).toString(), [search, status, page]);
-  const { data, loading, error, reload } = useAdminList<AdminJob>('/v1/admin/jobs/', query);
+  const { data, loading, error, reload } = useAdminList<AdminJob>(API_ENDPOINTS.admin.jobs, query);
 
   async function runAction(job: AdminJob, action: 'retry' | 'cancel') {
     setActionError('');
-    try { await apiFetch(`/v1/admin/jobs/${job.id}/${action}/`, { method: 'POST', body: {} }); reload(); }
+    try { await apiFetch(API_ENDPOINTS.admin.jobAction(job.id, action), { method: 'POST', body: {} }); reload(); }
     catch (err) { setActionError(err instanceof Error ? err.message : 'تعذر تنفيذ العملية.'); }
   }
 

@@ -7,6 +7,7 @@ import DownloadButton from '@/components/DownloadButton';
 import PageHero from '@/components/PageHero';
 import StatusBadge from '@/components/StatusBadge';
 import { apiFetch as fetchApi } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { GeneratedReport } from '@/shared/api/types';
 import { useRequireAuth } from '@/shared/auth/useRequireAuth';
 
@@ -18,7 +19,7 @@ export default function ReportDetailPage() {
 
   useEffect(() => {
     if (!ready || !params.id) return;
-    fetchApi<GeneratedReport>(`/reports/${params.id}/`)
+    fetchApi<GeneratedReport>(API_ENDPOINTS.reports.detail(params.id))
       .then(setReport)
       .catch((err) => setError(err instanceof Error ? err.message : 'تعذر تحميل التقرير.'));
   }, [ready, params.id]);

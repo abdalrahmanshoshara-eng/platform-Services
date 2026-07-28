@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Database, LockKeyhole, ServerCog } from 'lucide-react';
 import ReportTemplatesManager from '@/components/admin/ReportTemplatesManager';
 import { AdminHeader, StatusBadge } from '@/components/admin/AdminUI';
-import { API_URL } from '@/shared/api/client';
+import { API_ORIGIN } from '@/shared/api/client';
 
 type DbStatus = 'checking' | 'ok' | 'error';
 
@@ -14,7 +14,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const healthUrl = `${API_URL.replace(/\/api\/?$/, '')}/health/ready`;
+    const healthUrl = `${API_ORIGIN}/health/ready`;
     fetch(healthUrl, { signal: controller.signal })
       .then((res) => res.json())
       .then((data: { checks?: { database?: string } }) => {
