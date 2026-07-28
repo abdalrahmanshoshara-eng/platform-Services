@@ -16,12 +16,25 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-SECRET_KEY = os.getenv(
-    "DJANGO_SECRET_KEY",
-    "unsafe-development-fallback-change-before-production-32chars",
-)
-DEBUG = env_bool("DJANGO_DEBUG", True)
+INSECURE_SECRET_KEY = "unsafe-development-fallback-change-before-production-32chars"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", INSECURE_SECRET_KEY)
+# Fail closed: default to a production-safe DEBUG=False so a forgotten env var never
+# silently ships debug tracebacks and non-Secure cookies. Local/dev sets it explicitly.
+DEBUG = env_bool("DJANGO_DEBUG", False)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,backend")
+
+
+def require_secure_secret(debug: bool, secret_key: str) -> None:
+    """Refuse to boot in production with the shared development secret key."""
+    if not debug and secret_key == INSECURE_SECRET_KEY:
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set to a strong, unique value when DJANGO_DEBUG is off."
+        )
+
+
+require_secure_secret(DEBUG, SECRET_KEY)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -193,6 +206,17 @@ CSRF_COOKIE_SAMESITE = AUTH_COOKIE_SAMESITE
 CSRF_COOKIE_SECURE = AUTH_COOKIE_SECURE
 SESSION_COOKIE_SECURE = AUTH_COOKIE_SECURE
 CORS_ALLOW_CREDENTIALS = True
+
+# ---- Transport/security headers (auto-enabled when DEBUG is off) ----
+# Behind the gunicorn/proxy setup, trust the forwarded scheme so SSL redirect and
+# secure-cookie logic see HTTPS. All toggles are env-overridable for edge cases.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
+SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_HSTS_SECONDS", "31536000" if not DEBUG else "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
 
 
 # ---- Celery ----
