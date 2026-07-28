@@ -19,7 +19,9 @@ from reports.models import (
     GeneratedReport,
     ReportType,
     Service,
+    ServiceCategory,
     UserAdministration,
+    UserCategoryRestriction,
     UserServiceRestriction,
 )
 
@@ -173,6 +175,46 @@ class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
             record(
                 f"admin.restrictions.{mode}", actor=request.user, request=request, target=user,
                 metadata={"service_ids": service_ids, "reason": reason},
+            )
+        return Response(AdminUserDetailSerializer(user).data)
+
+    @action(detail=True, methods=["post"], url_path="category-restrictions")
+    def category_restrictions(self, request, pk=None):
+        user = self.get_object()
+        mode = request.data.get("mode", "add")
+        category_ids = sorted(set(request.data.get("category_ids") or []))
+        expires_at = request.data.get("expires_at")
+        reason = _reason(request) if mode == "add" else ""
+        if mode not in {"add", "remove"}:
+            return Response({"mode": ["القيمة يجب أن تكون add أو remove."]}, status=400)
+        if not category_ids:
+            return Response({"detail": "اختر فئة واحدة على الأقل."}, status=400)
+        categories = list(ServiceCategory.objects.filter(id__in=category_ids))
+        if len(categories) != len(category_ids):
+            return Response({"detail": "إحدى الفئات غير موجودة."}, status=400)
+        from rest_framework.fields import DateTimeField
+        parsed_expiry = None
+        if expires_at:
+            try:
+                parsed_expiry = DateTimeField().to_internal_value(expires_at)
+            except Exception:
+                return Response({"expires_at": ["تاريخ الانتهاء غير صالح."]}, status=400)
+        with transaction.atomic():
+            if mode == "remove":
+                UserCategoryRestriction.objects.filter(user=user, category_id__in=category_ids).delete()
+            else:
+                for category in categories:
+                    UserCategoryRestriction.objects.update_or_create(
+                        user=user, category=category,
+                        defaults={
+                            "reason": reason,
+                            "expires_at": parsed_expiry,
+                            "created_by": request.user,
+                        },
+                    )
+            record(
+                f"admin.category_restrictions.{mode}", actor=request.user, request=request, target=user,
+                metadata={"category_ids": category_ids, "reason": reason},
             )
         return Response(AdminUserDetailSerializer(user).data)
 
