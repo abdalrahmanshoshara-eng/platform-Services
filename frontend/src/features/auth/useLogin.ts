@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import { useAuth } from '@/shared/auth/AuthContext';
 import { toMessage } from '@/shared/errors/apiError';
 import type { UserSummary } from '@/shared/api/types';
@@ -15,7 +16,7 @@ export function useLogin() {
     setLoading(true);
     setError('');
     try {
-      const response = await apiFetch<{ user: UserSummary }>('/auth/login/', {
+      const response = await apiFetch<{ user: UserSummary }>(API_ENDPOINTS.auth.login, {
         method: 'POST',
         body: { username, password },
       });

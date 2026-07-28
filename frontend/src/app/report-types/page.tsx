@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import PageHero from '@/components/PageHero';
 import { apiFetch as fetchApi } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { ReportType } from '@/shared/api/types';
 import { useRequireAuth } from '@/shared/auth/useRequireAuth';
 
@@ -14,7 +15,7 @@ export default function ReportTypesPage() {
 
   useEffect(() => {
     if (!ready) return;
-    fetchApi<ReportType[]>('/report-types/')
+    fetchApi<ReportType[]>(API_ENDPOINTS.reportTypes.list)
       .then(setItems)
       .catch((err) => setError(err instanceof Error ? err.message : 'تعذر تحميل أنواع التقارير.'));
   }, [ready]);

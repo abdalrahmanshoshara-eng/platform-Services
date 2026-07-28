@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AdminHeader, StatusBadge } from '@/components/admin/AdminUI';
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import type { AdminService, AdminUser } from '@/shared/api/types';
 
 type DurationMode = 'permanent' | '5' | '15' | '30' | 'custom';
@@ -31,8 +32,8 @@ export default function AdminUserDetailPage() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch<AdminUser>(`/v1/admin/users/${id}/`),
-      apiFetch<{ results: AdminService[] }>('/v1/admin/services/?ordering=sort_order'),
+      apiFetch<AdminUser>(API_ENDPOINTS.admin.user(id)),
+      apiFetch<{ results: AdminService[] }>(`${API_ENDPOINTS.admin.services}?ordering=sort_order`),
     ]).then(([account, serviceData]) => {
       setUser(account);
       setServices(serviceData.results);
@@ -72,7 +73,7 @@ export default function AdminUserDetailPage() {
     setError('');
     try {
       const action = user.is_active ? 'deactivate' : 'activate';
-      const updated = await apiFetch<AdminUser>(`/v1/admin/users/${id}/${action}/`, {
+      const updated = await apiFetch<AdminUser>(API_ENDPOINTS.admin.userAction(id, action), {
         method: 'POST',
         body: { reason: disableReason },
       });
@@ -91,7 +92,7 @@ export default function AdminUserDetailPage() {
     setSaving(true);
     setError('');
     try {
-      const updated = await apiFetch<AdminUser>(`/v1/admin/users/${id}/restrictions/`, {
+      const updated = await apiFetch<AdminUser>(API_ENDPOINTS.admin.userRestrictions(id), {
         method: 'POST',
         body: {
           mode: 'add',
@@ -113,7 +114,7 @@ export default function AdminUserDetailPage() {
   async function removeRestriction(targetId: number) {
     setSaving(true);
     try {
-      const updated = await apiFetch<AdminUser>(`/v1/admin/users/${id}/restrictions/`, {
+      const updated = await apiFetch<AdminUser>(API_ENDPOINTS.admin.userRestrictions(id), {
         method: 'POST',
         body: { mode: 'remove', service_ids: [targetId] },
       });

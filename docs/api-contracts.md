@@ -1,27 +1,31 @@
 # API contracts
 
-Base: `/api`. Auth via HttpOnly cookies; unsafe methods require `X-CSRFToken`.
+Canonical base: `/api/v1`. Auth uses HttpOnly cookies; unsafe methods require
+`X-CSRFToken`. Existing `/api/...` application routes remain temporary deprecated aliases
+to the same views. New clients must use `/api/v1/...`; alias removal will be planned only
+after consumers have migrated (no removal date is currently scheduled). Health routes are
+not API-versioned.
 
 ## Auth
-- `POST /api/auth/login/` `{username,password}` → `200 {user}` + auth cookies.
-- `POST /api/auth/refresh/` (refresh cookie) → `200` + rotated cookies.
-- `POST /api/auth/logout/` → `200` + cleared cookies.
-- `GET /api/auth/me/` → `200 {id,username,email,is_staff,is_superuser}`.
+- `POST /api/v1/auth/login/` `{username,password}` → `200 {user}` + auth cookies.
+- `POST /api/v1/auth/refresh/` (refresh cookie) → `200` + rotated cookies.
+- `POST /api/v1/auth/logout/` → `200` + cleared cookies.
+- `GET /api/v1/auth/me/` → `200 {id,username,email,is_staff,is_superuser}`.
 
 ## Report types
-- `GET /api/report-types/` → active types (all types for staff).
-- `POST|PUT|DELETE /api/report-types/[{id}/]` → staff only.
+- `GET /api/v1/report-types/` → active types (all types for staff).
+- `POST|PUT|DELETE /api/v1/report-types/[{id}/]` → staff only.
 
 ## Reports
-- `POST /api/reports/` `{report_type_id,title,input_data}` → **202** `{...,status:"queued"}`.
-- `GET /api/reports/` → paginated; own reports (all for staff).
-- `GET /api/reports/{id}/` → detail.
-- `GET /api/reports/{id}/status/` → `{id,status,error_message,attempts,download_*_url,updated_at}`.
-- `POST /api/reports/{id}/retry/` → **202** re-queued (failed reports).
-- `GET /api/reports/{id}/download-docx|download-pdf/` → file stream (owner/staff only).
+- `POST /api/v1/reports/` `{report_type_id,title,input_data}` → **202** `{...,status:"queued"}`.
+- `GET /api/v1/reports/` → paginated; own reports (all for staff).
+- `GET /api/v1/reports/{id}/` → detail.
+- `GET /api/v1/reports/{id}/status/` → `{id,status,error_message,attempts,download_*_url,updated_at}`.
+- `POST /api/v1/reports/{id}/retry/` → **202** re-queued (failed reports).
+- `GET /api/v1/reports/{id}/download-docx|download-pdf/` → file stream (owner/staff only).
 
 ## Dashboard
-- `GET /api/dashboard/stats/` → aggregated counts + latest reports.
+- `GET /api/v1/dashboard/stats/` → aggregated counts + latest reports.
 
 ## Admin template versions
 All endpoints require a platform administrator and live below `/api/v1/admin`.
@@ -39,10 +43,10 @@ All endpoints require a platform administrator and live below `/api/v1/admin`.
 
 Lifecycle actions accept optional `{reason}` and write audit events. Template-version
 `PATCH`/`DELETE` are unsupported; `ReportType.template_file` is read-only in the admin API.
-`POST /api/reports/` returns `409 NO_ACTIVE_TEMPLATE` when no valid active version exists.
+`POST /api/v1/reports/` returns `409 NO_ACTIVE_TEMPLATE` when no valid active version exists.
 
 ## Excel Contacts
-- `POST /api/tools/excel-contacts/process/` (authenticated multipart:
+- `POST /api/v1/tools/excel-contacts/process/` (authenticated multipart:
   `file=.xlsx|.xls`, `countryCode`) → `200`
   `{fileName,zipBase64,summary,sourceSheetName,previews}`.
 - The endpoint enforces the `whatsapp-contacts` service/category access policy, a

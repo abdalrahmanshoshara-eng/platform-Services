@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { abortRequest, apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import { TERMINAL_STATUSES, type ReportStatusPayload } from '@/shared/api/types';
 
 const BASE_INTERVAL = 2000;
@@ -29,7 +30,7 @@ export function useReportStatus(reportId: number | null, initialStatus?: ReportS
 
     const tick = async () => {
       try {
-        const payload = await apiFetch<ReportStatusPayload>(`/reports/${reportId}/status/`, {
+        const payload = await apiFetch<ReportStatusPayload>(API_ENDPOINTS.reports.status(reportId), {
           signal: controller.signal,
         });
         if (cancelled) return;

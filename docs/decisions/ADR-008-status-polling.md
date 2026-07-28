@@ -7,7 +7,7 @@
 Clients need to track async generation progress. WebSockets/Channels add infrastructure.
 
 ## Decision
-Expose `GET /api/reports/{id}/status/` and poll from the SPA (`useReportStatus`): ~2s interval,
+Expose `GET /api/v1/reports/{id}/status/` and poll from the SPA (`useReportStatus`): ~2s interval,
 stop on terminal states, clean up on unmount, bounded backoff on transient errors.
 
 ## Consequences

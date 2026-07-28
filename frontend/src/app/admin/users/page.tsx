@@ -4,6 +4,7 @@ import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AdminEmpty, AdminHeader, DetailLink, Pagination, StatusBadge } from '@/components/admin/AdminUI';
 import type { AdminUser } from '@/shared/api/types';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import { useAdminList } from '@/shared/admin/useAdminList';
 
 export default function AdminUsersPage() {
@@ -12,7 +13,7 @@ export default function AdminUsersPage() {
   const [role, setRole] = useState('');
   const [page, setPage] = useState(1);
   const query = useMemo(() => new URLSearchParams({ search, status, role, page: String(page) }).toString(), [search, status, role, page]);
-  const { data, loading, error } = useAdminList<AdminUser>('/v1/admin/users/', query);
+  const { data, loading, error } = useAdminList<AdminUser>(API_ENDPOINTS.admin.users, query);
 
   return (
     <main className="admin-content">

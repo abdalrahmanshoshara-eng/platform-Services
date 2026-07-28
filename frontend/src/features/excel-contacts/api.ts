@@ -1,4 +1,5 @@
 import { apiFetch } from '@/shared/api/client';
+import { API_ENDPOINTS } from '@/shared/api/endpoints';
 import { ApiError } from '@/shared/errors/apiError';
 
 export type ExcelContactPreviewRow = Record<string, string | number | null>;
@@ -24,7 +25,7 @@ export function processExcelContacts(file: File, countryCode: string): Promise<E
   const body = new FormData();
   body.append('file', file);
   body.append('countryCode', countryCode);
-  return apiFetch<ExcelContactsResult>('/tools/excel-contacts/process/', {
+  return apiFetch<ExcelContactsResult>(API_ENDPOINTS.excelContacts.process, {
     method: 'POST',
     body,
   });

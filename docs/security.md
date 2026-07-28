@@ -1,7 +1,7 @@
 # Security
 
 - **Authentication**: JWT in HttpOnly cookies (`CookieJWTAuthentication`). Short-lived access
-  token; refresh rotation + blacklist via `/api/auth/refresh/`; logout blacklists + clears.
+  token; refresh rotation + blacklist via `/api/v1/auth/refresh/`; logout blacklists + clears.
   Tokens are never in the response body or readable by JS.
 - **CSRF**: enforced for cookie-authenticated unsafe methods; `csrftoken` cookie set on
   login/me; SPA echoes `X-CSRFToken`. CSRF is never disabled.

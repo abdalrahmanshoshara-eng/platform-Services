@@ -34,7 +34,7 @@ it('calls the authenticated Django processing endpoint and preserves the result 
 
   await expect(processExcelContacts(file, '963')).resolves.toEqual(successPayload);
   expect(fetchMock).toHaveBeenCalledWith(
-    'http://localhost:8000/api/tools/excel-contacts/process/',
+    'http://localhost:8000/api/v1/tools/excel-contacts/process/',
     expect.objectContaining({
       method: 'POST',
       credentials: 'include',

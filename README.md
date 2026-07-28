@@ -9,8 +9,8 @@
 - صلاحيات تقييد مجدولة أو دائمة على مستوى الخدمة، مع سجل تدقيق لعمليات التشغيل.
 
 تُدار الخدمات والقيود من مركز التحكم الإداري. لا تحتوي واجهة Next.js على
-قائمة خدمات ثابتة؛ بل تقرأها من `GET /api/services/` وتستخدم
-`POST /api/services/{slug}/launch/` قبل فتح أي خدمة.
+قائمة خدمات ثابتة؛ بل تقرأها من `GET /api/v1/services/` وتستخدم
+`POST /api/v1/services/{slug}/launch/` قبل فتح أي خدمة.
 
 ## التشغيل السريع
 
@@ -31,7 +31,7 @@ docker-compose ps
 بعد أن تصبح الخدمات `healthy`:
 
 - البوابة: http://localhost:3000
-- API: http://localhost:8000/api
+- API: http://localhost:8000/api/v1
 - مركز التحكم الإداري: http://localhost:3000/admin
 - الإدارة: http://localhost:8000/admin
 
@@ -184,7 +184,7 @@ docker compose up --build
 بعد التشغيل:
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:8000/api
+- Backend API: http://localhost:8000/api/v1
 - Django Admin: http://localhost:8000/admin
 
 ## 4. بيانات الدخول الافتراضية
@@ -203,35 +203,35 @@ docker compose up --build
 ### Authentication
 
 ```http
-POST /api/auth/login/
-POST /api/auth/logout/
-GET  /api/auth/me/
+POST /api/v1/auth/login/
+POST /api/v1/auth/logout/
+GET  /api/v1/auth/me/
 ```
 
 ### Report Types
 
 ```http
-GET    /api/report-types/
-GET    /api/report-types/{id}/
-POST   /api/report-types/          # admin فقط
-PUT    /api/report-types/{id}/      # admin فقط
-DELETE /api/report-types/{id}/      # admin فقط
+GET    /api/v1/report-types/
+GET    /api/v1/report-types/{id}/
+POST   /api/v1/report-types/          # admin فقط
+PUT    /api/v1/report-types/{id}/      # admin فقط
+DELETE /api/v1/report-types/{id}/      # admin فقط
 ```
 
 ### Reports
 
 ```http
-GET  /api/reports/
-POST /api/reports/
-GET  /api/reports/{id}/
-GET  /api/reports/{id}/download-docx/
-GET  /api/reports/{id}/download-pdf/
+GET  /api/v1/reports/
+POST /api/v1/reports/
+GET  /api/v1/reports/{id}/
+GET  /api/v1/reports/{id}/download-docx/
+GET  /api/v1/reports/{id}/download-pdf/
 ```
 
 ### Dashboard
 
 ```http
-GET /api/dashboard/stats/
+GET /api/v1/dashboard/stats/
 ```
 
 ## 6. الصلاحيات

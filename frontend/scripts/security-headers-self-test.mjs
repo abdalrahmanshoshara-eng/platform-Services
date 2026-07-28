@@ -9,7 +9,7 @@ if (!mode) {
       env: {
         ...process.env,
         NODE_ENV: testMode,
-        NEXT_PUBLIC_API_URL: 'https://api.example.test/api',
+        NEXT_PUBLIC_API_URL: 'https://api.example.test/api/v1',
         SECURITY_HEADERS_TEST_MODE: testMode,
       },
       stdio: 'inherit',

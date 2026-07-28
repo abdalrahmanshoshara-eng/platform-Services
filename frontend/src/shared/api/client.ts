@@ -1,6 +1,12 @@
 import { ApiError, type ApiErrorBody } from '@/shared/errors/apiError';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+// Keep older deployments that still inject a base ending in /api on canonical v1 calls.
+export const API_URL = configuredApiUrl
+  .replace(/\/api\/?$/, '/api/v1')
+  .replace(/\/$/, '');
+export const API_ORIGIN = API_URL.replace(/\/api\/v1$/, '');
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
