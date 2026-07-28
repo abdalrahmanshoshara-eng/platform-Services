@@ -9,7 +9,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | -- | -------- | ---- | ------- | -------- | ------ | --------------------- | ------------ |
 | B1 | P0 · **RESOLVED 2026-07-28** | Security/Auth | ✅ Fixed. Was: login/refresh throttling was not shared across workers — no `CACHES` backend, so DRF throttles used per-process `LocMemCache` under `gunicorn --workers 3` (effective login limit ≈ `10/min × workers`), and registration had no dedicated throttle scope. Now a shared Redis cache backs throttling and registration has its own `register` scope. | `config/settings.py` had no `CACHES`; throttle scopes at `settings.py:149-156`; `docker-compose.yml` backend `--workers 3` | Brute-force protection (a stated requirement) was materially weakened in the shipped config | Done — see "B1 — Resolution" below | Redis (already present) |
 | B2 | P0 · **RESOLVED 2026-07-28** | Security/Admin | ✅ Fixed. Was: category-level user blocking is a silent no-op — `UserCategoryRestriction` is modeled but no policy, selector, or admin endpoint ever reads/writes it. Now enforced by the centralized policy and manageable via an audited admin endpoint. | `reports/models.py:240-258`; old `services_catalog/policy.py:15-29` only read `service.user_restrictions`; grep found no other refs | Admins believed a user was blocked from a category while access remained — an access-control that silently failed; failed an acceptance criterion | Done — see "B2 — Resolution" below | B7 |
-| B3 | P1 | Security/Config | Insecure production defaults: hardcoded `SECRET_KEY` fallback, `DEBUG` defaults `True`, and `AUTH_COOKIE_SECURE`/`CSRF_COOKIE_SECURE` derive from `DEBUG`; `.env.example` ships `DEBUG=True`. | `config/settings.py:19-24,173,180-181`; `.env.example` | A prod deploy that forgets to flip `DEBUG` serves non-Secure auth cookies + tracebacks | Fail fast if `SECRET_KEY` unset in non-debug; require explicit `DJANGO_DEBUG=False`; add a deploy checklist | — |
+| B3 | P1 · **RESOLVED 2026-07-28** | Security/Config | ✅ Fixed. `DEBUG` now defaults to `False` (fail-closed); a guard refuses to boot with the shared dev `SECRET_KEY` when `DEBUG` is off; and with `DEBUG` off, HTTPS redirect + HSTS + nosniff + referrer-policy + Secure cookies turn on automatically (all env-overridable). `.env.example` gained a production checklist. | `config/settings.py:19-24,182-195`; `.env.example` | A prod deploy that forgot to flip `DEBUG` served non-Secure cookies + tracebacks | Done — see "B3 — Resolution" below | — |
 | B4 | P1 · **RESOLVED 2026-07-28** | Architecture/Admin | ✅ Fixed for Service (the real gap). Was: generic `PATCH` on the admin Service viewset and `list_editable`/editable fields in Django `admin.py` flipped `is_active`/`status` directly, skipping the audited `activate`/`deactivate` actions. `Service.is_active` is now read-only on the API serializer and locked in Django admin; template `status` is locked in Django admin. ReportType toggling was already audited via `perform_update` (no metadata loss) — left as-is. | `admin_api/serializers.py:81-101`; `admin.py:29-34,54-60`; ReportType path `admin_api/views.py:300-308` already audits | Services/templates could be disabled with no audit trail or `disabled_by/at` metadata | Done — see "B4 — Resolution" below | — |
 | B5 | P1 | Architecture/Validation | `ReportType.fields_schema` is editable via `AdminReportTypeViewSet` with no schema validation; `validate_fields_schema` runs only inside a use case that has no HTTP entry point. | `admin_api/views.py:282-309`; `admin_api/serializers.py:148-157`; `catalog/validation.py`; `catalog/application.py:20-47` | Invalid schemas (dup names, `select` w/o options) persist and break the user form/generation | Call `validate_fields_schema` in the admin serializer `validate()`; add API-level test | B6 |
 | B6 | P1 | Architecture/Dead code | Template-version lifecycle (`ReportTemplateVersion`, `ActivateTemplateVersionUseCase`) and DOCX security scanner (`catalog/security.py`) are unreachable via any API — only unit-tested. Admin "report templates" needs cannot be met. | No viewset/URL in `reports/urls.py` or `admin_api/urls.py`; callers only in tests/migrations | Documented template management + upload-security features effectively don't exist at runtime | Expose versioning + template upload through `admin_api` (draft→validate→activate) wired to the scanner, or explicitly descope | B5 |
@@ -31,7 +31,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B22 | P2 | Correctness/Domain | `recover_stuck_reports` sets `status=FAILED` directly instead of via `transition()`, circumventing the "domain is the only place transitions happen" invariant. | `management/commands/recover_stuck_reports.py:22-26` | Invariant erosion; future transition rules could be skipped by this path | Route the recovery transition through `domain.transition()` | — |
 | B23 | P3 | Frontend/Types | excel-contacts is plain untyped JS in an otherwise strict-TS codebase; throws/consumes untyped `Error` objects. | `lib/excel-contacts/contacts.js:75-125,182-188`; `components/ContactProcessor.js` (298 lines) | Unchecked corner; no type safety for the most intricate FE logic | Port to TypeScript; add unit tests to Vitest (currently only an ad-hoc `test:excel` script) | B7 |
 | B24 | P3 | Docs | Repo docs (`docs/architecture.md`, `docs/api-contracts.md`, ADRs) describe the generic multi-tool platform, not the report-generation implementation. | `docs/` vs verified `CODEBASE_MAP.md` | New contributors are misled about models/flows that don't exist | Reconcile docs with `CODEBASE_MAP.md`; note descoped features explicitly | — |
-| B25 | P3 | Security/Headers | No security headers/CSP configured (`SecurityMiddleware` present but no HSTS/SSL-redirect/CSP settings), despite requirements asking for them. | `config/settings.py` (no `SECURE_*`/CSP) | Weaker defense-in-depth in production | Add `SECURE_HSTS_*`, `SECURE_SSL_REDIRECT`, referrer policy, and a CSP (env-gated for prod) | B3 |
+| B25 | P3 · **Mostly done** | Security/Headers | `SECURE_HSTS_*`, `SECURE_SSL_REDIRECT`, `SECURE_CONTENT_TYPE_NOSNIFF`, and referrer policy are now configured (under B3, auto-on when `DEBUG` is off). Only a Content-Security-Policy is still missing (needs a CSP middleware/dependency). | `config/settings.py:182-195` | Weaker defense-in-depth in production | Remaining: add a CSP (would introduce a small dependency such as `django-csp`) | B3 (done) |
 | B26 | P3 | Verification | `Needs verification`: backend `manage.py check`/`pytest` and frontend Vitest could not be run in the audit sandbox (backend deps not installed / Windows `.venv`; frontend `node_modules` missing the Linux `@rollup/rollup-linux-x64-gnu` native binary). Only `npm run typecheck` was executed (passed). | See "Verification" note below | Backend test suite health unconfirmed by this audit | Run the full Definition-of-Done on a matched platform / CI | — |
 
 ## B2 — Resolution (2026-07-28)
@@ -178,6 +178,43 @@ serializer). No migration. No frontend changes.
   username-similar passwords rejected with 400; strong password accepted with 201). Full
   suite: 84 passed, 4 failed (the same pre-existing environmental media-mount
   `PermissionError`s, unrelated to B10).
+
+## B3 — Resolution (2026-07-28)
+**Status:** Resolved (fail-closed defaults + production transport hardening).
+
+**Root cause:** `DEBUG` defaulted to `True` and `SECRET_KEY` fell back to a hardcoded
+development value, while `AUTH_COOKIE_SECURE`/`CSRF_COOKIE_SECURE`/`SESSION_COOKIE_SECURE`
+were derived from `DEBUG`. A deploy that forgot to set `DJANGO_DEBUG=False` therefore
+served debug tracebacks and non-Secure auth cookies, and could run on the shared dev secret.
+
+**Fix (config/settings.py):**
+- `DEBUG` now defaults to `False` (fail-closed); dev/compose set `DJANGO_DEBUG=True`
+  explicitly.
+- `require_secure_secret(DEBUG, SECRET_KEY)` raises `ImproperlyConfigured` at boot if the
+  shared `INSECURE_SECRET_KEY` is used while `DEBUG` is off.
+- Added transport hardening that auto-enables when `DEBUG` is off (all env-overridable):
+  `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS=31536000` (+ subdomains/preload),
+  `SECURE_PROXY_SSL_HEADER`, `SECURE_CONTENT_TYPE_NOSNIFF`, `SECURE_REFERRER_POLICY`.
+  Existing Secure-cookie flags remain tied to the (now fail-closed) `DEBUG`.
+- `settings_test.py` pins `DJANGO_DEBUG=True` and a real secret *before* importing base
+  settings (so the guard never trips in a clean CI without `.env`), and force-disables
+  SSL redirect/HSTS so the plain-HTTP test client is never redirected.
+- `.env.example` gained a production checklist.
+
+**Files changed:** `backend/config/settings.py`, `backend/config/settings_test.py`,
+`.env.example`, new `backend/reports/tests/test_production_settings.py`. No migration. No
+frontend changes.
+
+**Verification (SQLite test settings):**
+- `python manage.py check` — 0 issues.
+- `pytest test_production_settings.py` — 6 passed. Full suite: 90 passed, 4 failed (the same
+  pre-existing environmental media-mount `PermissionError`s, unrelated to B3).
+- Manual boot checks: `DJANGO_DEBUG=False` + fallback secret → raises `ImproperlyConfigured`;
+  `DJANGO_DEBUG=False` + real secret → loads with `SECURE_SSL_REDIRECT=True`,
+  `SECURE_HSTS_SECONDS=31536000`, `AUTH_COOKIE_SECURE=True`.
+
+**Remaining:** a Content-Security-Policy header (tracked under B25) is still not set — it
+needs a CSP middleware/dependency and is out of B3's scope.
 
 ## Verification performed
 - `npm run typecheck` (frontend, `tsc --noEmit`) — **passed** (exit 0).
