@@ -8,6 +8,9 @@ psycopg[binary]==3.3.4
 python-dotenv==1.2.2
 docxtpl==0.20.2
 python-docx==1.2.0
+openpyxl==3.1.5
+xlrd==2.0.2
+defusedxml==0.7.1
 gunicorn==26.0.0
 celery==5.6.3
 redis==8.0.1
