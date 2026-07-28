@@ -31,7 +31,9 @@ class ReportTemplateVersionAdmin(admin.ModelAdmin):
     list_display = ("report_type", "version", "status", "checksum", "created_at", "activated_at")
     list_filter = ("status", "report_type")
     search_fields = ("report_type__slug", "template_file")
-    readonly_fields = ("checksum", "created_at", "activated_at")
+    # status is a lifecycle field owned by the activation use case; editing it here
+    # would skip schema/placeholder validation and checksum computation.
+    readonly_fields = ("status", "checksum", "created_at", "activated_at")
 
 
 @admin.register(AuditEvent)
@@ -55,7 +57,10 @@ class AuditEventAdmin(admin.ModelAdmin):
 class ServiceAdmin(admin.ModelAdmin):
     list_display = ("name", "category", "kind", "sort_order", "requires_staff", "is_active")
     list_filter = ("kind", "category", "requires_staff", "is_active")
-    list_editable = ("sort_order", "is_active")
+    # Enable/disable state (and its metadata) is owned by the audited
+    # activate/deactivate API actions, so it is read-only here.
+    list_editable = ("sort_order",)
+    readonly_fields = ("is_active", "disabled_reason", "disabled_at", "disabled_by")
     search_fields = ("name", "slug", "description")
     prepopulated_fields = {"slug": ("name",)}
 

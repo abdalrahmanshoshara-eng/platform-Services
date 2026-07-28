@@ -150,6 +150,7 @@ REST_FRAMEWORK = {
         "user": os.getenv("THROTTLE_USER", "1000/min"),
         "anon": os.getenv("THROTTLE_ANON", "100/min"),
         "login": os.getenv("THROTTLE_LOGIN", "10/min"),
+        "register": os.getenv("THROTTLE_REGISTER", "10/min"),
         "refresh": os.getenv("THROTTLE_REFRESH", "20/min"),
         "report_create": os.getenv("THROTTLE_REPORT_CREATE", "30/min"),
         "download": os.getenv("THROTTLE_DOWNLOAD", "120/min"),
@@ -157,6 +158,18 @@ REST_FRAMEWORK = {
 }
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# Shared cache backing DRF throttling. It MUST be a cross-process store so the
+# login/refresh/register rate limits hold across gunicorn workers (a per-process
+# LocMemCache would multiply every limit by the worker count). Defaults to Redis;
+# point DJANGO_CACHE_URL at a dedicated Redis DB to keep it off the Celery broker.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.getenv("DJANGO_CACHE_URL", REDIS_URL),
+        "KEY_PREFIX": "reports",
+    }
+}
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("ACCESS_TOKEN_MINUTES", "15"))),

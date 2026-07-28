@@ -7,16 +7,16 @@ architecture blocking safe development · **P2** important maintainability/perf/
 
 | ID | Priority | Area | Finding | Evidence | Impact | Recommended direction | Dependencies |
 | -- | -------- | ---- | ------- | -------- | ------ | --------------------- | ------------ |
-| B1 | P0 | Security/Auth | Login/refresh throttling is not shared across workers — no `CACHES` backend, so DRF throttles use per-process `LocMemCache` while backend runs `gunicorn --workers 3`. Effective login limit ≈ `10/min × workers`. | `config/settings.py` has no `CACHES`; throttle scopes at `settings.py:149-156`; `docker-compose.yml` backend `--workers 3` | Brute-force protection (a stated requirement) is materially weakened in the shipped config | Configure a shared Redis cache backend for throttling; keep `LocMemCache` only for tests | Redis (already present) |
+| B1 | P0 · **RESOLVED 2026-07-28** | Security/Auth | ✅ Fixed. Was: login/refresh throttling was not shared across workers — no `CACHES` backend, so DRF throttles used per-process `LocMemCache` under `gunicorn --workers 3` (effective login limit ≈ `10/min × workers`), and registration had no dedicated throttle scope. Now a shared Redis cache backs throttling and registration has its own `register` scope. | `config/settings.py` had no `CACHES`; throttle scopes at `settings.py:149-156`; `docker-compose.yml` backend `--workers 3` | Brute-force protection (a stated requirement) was materially weakened in the shipped config | Done — see "B1 — Resolution" below | Redis (already present) |
 | B2 | P0 · **RESOLVED 2026-07-28** | Security/Admin | ✅ Fixed. Was: category-level user blocking is a silent no-op — `UserCategoryRestriction` is modeled but no policy, selector, or admin endpoint ever reads/writes it. Now enforced by the centralized policy and manageable via an audited admin endpoint. | `reports/models.py:240-258`; old `services_catalog/policy.py:15-29` only read `service.user_restrictions`; grep found no other refs | Admins believed a user was blocked from a category while access remained — an access-control that silently failed; failed an acceptance criterion | Done — see "B2 — Resolution" below | B7 |
 | B3 | P1 | Security/Config | Insecure production defaults: hardcoded `SECRET_KEY` fallback, `DEBUG` defaults `True`, and `AUTH_COOKIE_SECURE`/`CSRF_COOKIE_SECURE` derive from `DEBUG`; `.env.example` ships `DEBUG=True`. | `config/settings.py:19-24,173,180-181`; `.env.example` | A prod deploy that forgets to flip `DEBUG` serves non-Secure auth cookies + tracebacks | Fail fast if `SECRET_KEY` unset in non-debug; require explicit `DJANGO_DEBUG=False`; add a deploy checklist | — |
-| B4 | P1 | Architecture/Admin | Audited enable/disable is bypassable: generic `PATCH` on admin Service/ReportType viewsets and `list_editable`/editable fields in Django `admin.py` flip `is_active`/`status` directly, skipping the `activate`/`deactivate` actions that set `disabled_by/at` and write audit. | `admin_api/views.py:180-227,282-309`; `admin_api/serializers.py:81-101`; `admin.py:29-34,54-60` | Services/templates disabled with no audit trail or metadata; audit integrity gap | Make `is_active`/`status` read-only on the generic serializers; route state changes only through audited actions; lock down Django admin editable fields | — |
+| B4 | P1 · **RESOLVED 2026-07-28** | Architecture/Admin | ✅ Fixed for Service (the real gap). Was: generic `PATCH` on the admin Service viewset and `list_editable`/editable fields in Django `admin.py` flipped `is_active`/`status` directly, skipping the audited `activate`/`deactivate` actions. `Service.is_active` is now read-only on the API serializer and locked in Django admin; template `status` is locked in Django admin. ReportType toggling was already audited via `perform_update` (no metadata loss) — left as-is. | `admin_api/serializers.py:81-101`; `admin.py:29-34,54-60`; ReportType path `admin_api/views.py:300-308` already audits | Services/templates could be disabled with no audit trail or `disabled_by/at` metadata | Done — see "B4 — Resolution" below | — |
 | B5 | P1 | Architecture/Validation | `ReportType.fields_schema` is editable via `AdminReportTypeViewSet` with no schema validation; `validate_fields_schema` runs only inside a use case that has no HTTP entry point. | `admin_api/views.py:282-309`; `admin_api/serializers.py:148-157`; `catalog/validation.py`; `catalog/application.py:20-47` | Invalid schemas (dup names, `select` w/o options) persist and break the user form/generation | Call `validate_fields_schema` in the admin serializer `validate()`; add API-level test | B6 |
 | B6 | P1 | Architecture/Dead code | Template-version lifecycle (`ReportTemplateVersion`, `ActivateTemplateVersionUseCase`) and DOCX security scanner (`catalog/security.py`) are unreachable via any API — only unit-tested. Admin "report templates" needs cannot be met. | No viewset/URL in `reports/urls.py` or `admin_api/urls.py`; callers only in tests/migrations | Documented template management + upload-security features effectively don't exist at runtime | Expose versioning + template upload through `admin_api` (draft→validate→activate) wired to the scanner, or explicitly descope | B5 |
 | B7 | P1 | Security/Frontend | `POST /api/excel-contacts/process` (Next server route) processes uploaded Excel with **no auth check**; only the React page gates access client-side. Business logic also lives entirely in the frontend, bypassing the backend tool pipeline. | `app/api/excel-contacts/process/route.js:14-40` (no session check); page guard `app/tools/excel-contacts/page.tsx` | Unauthenticated compute/DoS vector; tool logic outside backend authz/audit | Add auth (call backend or verify cookie) + rate limit, or move processing to a backend tool endpoint | — |
 | B8 | P1 | Security/Frontend | Admin route protection is client-side only (`AdminChrome` effect redirect); no `middleware.ts`. Child page effects can fire fetches before the redirect. | `components/admin/AdminChrome.tsx:14-22`; no `middleware.*` in repo | Real protection depends entirely on backend authz; brittle if any admin endpoint is under-guarded | Keep backend as the gate (it is), and add an edge `middleware.ts` guard for `/admin/*`; audit every `admin_api` endpoint's permission class | B4 |
 | B9 | P1 | API/Consistency | API versioning is inconsistent: auth/reports/services under `/api/`, admin under `/api/v1/`. | `config/urls.py:13-19`; `reports/urls.py` | Two versioning contracts in one project; contract drift / client confusion | Version all public endpoints under `/api/v1/`; keep unversioned aliases temporarily for back-compat | — |
-| B10 | P1 | Security/Auth | Registration does not run Django password validators (only `min_length=8`); no dedicated throttle scope. | `accounts/serializers.py:27-41` (no `validate_password`); `accounts/views.py:48-59` (no throttle) | Weak/common passwords accepted platform-wide; higher-volume account creation than login | Call `django.contrib.auth.password_validation.validate_password`; add a `register` throttle scope | B1 |
+| B10 | P1 · **Partially done** | Security/Auth | Registration does not run Django password validators (only `min_length=8`). ~~No dedicated throttle scope~~ — throttle half resolved under B1 (a `register` scope + shared cache). Password-validator half is still open. | `accounts/serializers.py:27-41` (no `validate_password`) | Weak/common passwords accepted platform-wide | Remaining: call `django.contrib.auth.password_validation.validate_password` in `RegisterSerializer` | B1 (done) |
 | B11 | P2 | Performance | N+1 in admin analytics: Python loop over every `Service` issuing 3 count queries each (`success`/`denied`/restrictions). | `admin_api/views.py:324-336` | `1+3N` queries; degrades as catalog/audit grow | Replace with grouped `values(...).annotate(Count(...))` aggregation | B12 |
 | B12 | P2 | Performance/Data | Usage analytics derived from `AuditEvent` filtered by string `target_id`, but there is no index on `(action,target_type,target_id)`. | `admin_api/views.py:326-336`; indexes at `models.py:145-149` | Per-service analytics lookups scan/inefficient at volume | Add a composite index, or introduce a first-class usage-event table if analytics grows | — |
 | B13 | P2 | Performance | Services list is effectively N+1 for restricted users: `prefetch_related("user_restrictions",...)` is set but `service_access_for` re-queries `.filter(...).first()` per service instead of using the prefetch. | `services_catalog/views.py:22`; `policy.py:21-27`; `serializers.py:34-38` | One extra query per service on the authenticated list endpoint | Compute restrictions from the prefetched set, or annotate access in the queryset | — |
@@ -81,6 +81,76 @@ service restrictions, so category restrictions aren't surfaced in the user-detai
 (enforcement and management work regardless); surfacing them is a small follow-up. The two
 requirements docs still describe multi-user bulk endpoints — this fix follows the existing
 per-user restriction pattern instead.
+
+## B4 — Resolution (2026-07-28)
+**Status:** Resolved (Service enable/disable audit gap closed; Django admin locked).
+
+**Root cause:** `Service` enable/disable had dedicated audited actions
+(`activate`/`deactivate` set `disabled_reason/at/by` and write an `AuditEvent`), but
+`AdminServiceSerializer` left `is_active` writable, so `PATCH /api/v1/admin/services/{id}/
+{"is_active": false}` flipped the flag with no audit and no metadata. Django admin also
+allowed inline toggling (`ServiceAdmin.list_editable` included `is_active`) and editing a
+template version's `status` directly (bypassing the activation use case). Re-trace note:
+`ReportType.is_active` toggles via `PATCH` but `AdminReportTypeViewSet.perform_update`
+already writes an audit event and ReportType has no disabled-* metadata, so it was **not**
+a real bypass and was left unchanged.
+
+**Fix:**
+- `AdminServiceSerializer`: added `is_active` to `read_only_fields`, so state changes are
+  only possible through the audited `activate`/`deactivate` actions. Other properties
+  (name, sort_order, …) remain editable via `PATCH`.
+- `admin.py`: `ServiceAdmin` — removed `is_active` from `list_editable` and made
+  `is_active`, `disabled_reason`, `disabled_at`, `disabled_by` read-only;
+  `ReportTemplateVersionAdmin` — made `status` read-only.
+
+**Files changed:** `backend/reports/admin_api/serializers.py`, `backend/reports/admin.py`,
+new `backend/reports/tests/test_service_toggle_audit.py`. No migration (no schema change).
+No frontend changes.
+
+**Verification (SQLite test settings):**
+- `python manage.py check` — 0 issues; `makemigrations --check --dry-run` — No changes.
+- Targeted: `test_service_toggle_audit.py` + admin/service-catalog/category suites — 30 passed
+  (4 new B4 tests + 26 existing). Full suite: 77 passed, 4 failed (the same pre-existing
+  environmental media-mount `PermissionError`s, unrelated to B4).
+
+**Remaining limitation:** Non-state property edits via the generic Service `PATCH`
+(e.g. `launch_target`, `settings`) are validated by `Service.clean()` but are still not
+themselves audited; adding a `perform_update` audit for Service edits is a small follow-up
+outside B4's enable/disable scope.
+
+## B1 — Resolution (2026-07-28)
+**Status:** Resolved (shared throttle cache + dedicated registration scope).
+
+**Root cause:** No `CACHES` was configured, so DRF's rate throttles fell back to Django's
+default per-process `LocMemCache`. With `gunicorn --workers 3` each worker counted
+independently, so the "10/min" login limit was really ~"10/min per worker". Registration
+had no throttle scope at all and fell back to the generic anon limit (100/min).
+
+**Fix:**
+- Added a Redis-backed `CACHES["default"]` (`django.core.cache.backends.redis.RedisCache`,
+  `LOCATION=DJANGO_CACHE_URL or REDIS_URL`, `KEY_PREFIX="reports"`) so throttle counters are
+  shared across all worker processes. `redis` is already a dependency and a running service.
+- `settings_test.py` overrides the cache to in-process `LocMemCache` so tests need no Redis.
+- Added a `register` throttle scope (`THROTTLE_REGISTER`, default `10/min`), a
+  `RegisterRateThrottle`, and wired it onto `RegisterView`.
+
+**Files changed:** `backend/config/settings.py`, `backend/config/settings_test.py`,
+`backend/reports/accounts/throttling.py`, `backend/reports/accounts/views.py`,
+new `backend/reports/tests/test_throttling_cache.py`. No migration (no schema change). No
+frontend changes.
+
+**Verification (SQLite test settings):**
+- `python manage.py check` — 0 issues; `makemigrations --check --dry-run` — No changes.
+- `pytest test_throttling_cache.py` — 3 passed (shared-cache config guard; register throttle
+  wired; registration returns 429 past the limit via the real throttle+cache path). Full
+  suite: 80 passed, 4 failed (the same pre-existing environmental media-mount
+  `PermissionError`s, unrelated to B1).
+
+**Operational note:** to keep throttle keys off the Celery broker DB, set
+`DJANGO_CACHE_URL` to a dedicated Redis database (e.g. `redis://redis:6379/2`).
+
+**Remaining:** the register password-strength gap (B10) is still open — throttling alone
+does not reject weak passwords.
 
 ## Verification performed
 - `npm run typecheck` (frontend, `tsc --noEmit`) — **passed** (exit 0).

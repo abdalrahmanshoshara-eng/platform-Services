@@ -21,3 +21,7 @@ REST_FRAMEWORK = {
 }
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 SECRET_KEY = "test-only-secret-key-with-at-least-thirty-two-bytes"
+
+# Tests must not require a running Redis; use an in-process cache. Throttling is
+# disabled by default above (rates=None) and re-enabled per-test where needed.
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
