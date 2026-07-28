@@ -11,7 +11,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B2 | P0 · **RESOLVED 2026-07-28** | Security/Admin | ✅ Fixed. Was: category-level user blocking is a silent no-op — `UserCategoryRestriction` is modeled but no policy, selector, or admin endpoint ever reads/writes it. Now enforced by the centralized policy and manageable via an audited admin endpoint. | `reports/models.py:240-258`; old `services_catalog/policy.py:15-29` only read `service.user_restrictions`; grep found no other refs | Admins believed a user was blocked from a category while access remained — an access-control that silently failed; failed an acceptance criterion | Done — see "B2 — Resolution" below | B7 |
 | B3 | P1 · **RESOLVED 2026-07-28** | Security/Config | ✅ Fixed. `DEBUG` now defaults to `False` (fail-closed); a guard refuses to boot with the shared dev `SECRET_KEY` when `DEBUG` is off; and with `DEBUG` off, HTTPS redirect + HSTS + nosniff + referrer-policy + Secure cookies turn on automatically (all env-overridable). `.env.example` gained a production checklist. | `config/settings.py:19-24,182-195`; `.env.example` | A prod deploy that forgot to flip `DEBUG` served non-Secure cookies + tracebacks | Done — see "B3 — Resolution" below | — |
 | B4 | P1 · **RESOLVED 2026-07-28** | Architecture/Admin | ✅ Fixed for Service (the real gap). Was: generic `PATCH` on the admin Service viewset and `list_editable`/editable fields in Django `admin.py` flipped `is_active`/`status` directly, skipping the audited `activate`/`deactivate` actions. `Service.is_active` is now read-only on the API serializer and locked in Django admin; template `status` is locked in Django admin. ReportType toggling was already audited via `perform_update` (no metadata loss) — left as-is. | `admin_api/serializers.py:81-101`; `admin.py:29-34,54-60`; ReportType path `admin_api/views.py:300-308` already audits | Services/templates could be disabled with no audit trail or `disabled_by/at` metadata | Done — see "B4 — Resolution" below | — |
-| B5 | P1 | Architecture/Validation | `ReportType.fields_schema` is editable via `AdminReportTypeViewSet` with no schema validation; `validate_fields_schema` runs only inside a use case that has no HTTP entry point. | `admin_api/views.py:282-309`; `admin_api/serializers.py:148-157`; `catalog/validation.py`; `catalog/application.py:20-47` | Invalid schemas (dup names, `select` w/o options) persist and break the user form/generation | Call `validate_fields_schema` in the admin serializer `validate()`; add API-level test | B6 |
+| B5 | P1 · **RESOLVED 2026-07-28** | Architecture/Validation | ✅ Fixed. `AdminReportTypeSerializer.validate()` now runs `validate_fields_schema` on create/PATCH, so malformed schemas (dup names, `select` without `options`, bad type, non-list) are rejected with `400 INVALID_FIELDS_SCHEMA` instead of being persisted. | `admin_api/serializers.py` `AdminReportTypeSerializer`; `catalog/validation.py` | Invalid schemas used to persist and break the user form/generation | Done — see "B5 — Resolution" below | B6 |
 | B6 | P1 | Architecture/Dead code | Template-version lifecycle (`ReportTemplateVersion`, `ActivateTemplateVersionUseCase`) and DOCX security scanner (`catalog/security.py`) are unreachable via any API — only unit-tested. Admin "report templates" needs cannot be met. | No viewset/URL in `reports/urls.py` or `admin_api/urls.py`; callers only in tests/migrations | Documented template management + upload-security features effectively don't exist at runtime | Expose versioning + template upload through `admin_api` (draft→validate→activate) wired to the scanner, or explicitly descope | B5 |
 | B7 | P1 | Security/Frontend | `POST /api/excel-contacts/process` (Next server route) processes uploaded Excel with **no auth check**; only the React page gates access client-side. Business logic also lives entirely in the frontend, bypassing the backend tool pipeline. | `app/api/excel-contacts/process/route.js:14-40` (no session check); page guard `app/tools/excel-contacts/page.tsx` | Unauthenticated compute/DoS vector; tool logic outside backend authz/audit | Add auth (call backend or verify cookie) + rate limit, or move processing to a backend tool endpoint | — |
 | B8 | P1 | Security/Frontend | Admin route protection is client-side only (`AdminChrome` effect redirect); no `middleware.ts`. Child page effects can fire fetches before the redirect. | `components/admin/AdminChrome.tsx:14-22`; no `middleware.*` in repo | Real protection depends entirely on backend authz; brittle if any admin endpoint is under-guarded | Keep backend as the gate (it is), and add an edge `middleware.ts` guard for `/admin/*`; audit every `admin_api` endpoint's permission class | B4 |
@@ -215,6 +215,33 @@ frontend changes.
 
 **Remaining:** a Content-Security-Policy header (tracked under B25) is still not set — it
 needs a CSP middleware/dependency and is out of B3's scope.
+
+## B5 — Resolution (2026-07-28)
+**Status:** Resolved (admin ReportType schema is now validated server-side).
+
+**Root cause:** `AdminReportTypeViewSet` is a full `ModelViewSet` whose serializer had no
+`validate()`, so `fields_schema` was persisted verbatim. `validate_fields_schema` existed
+but was only called from `ActivateTemplateVersionUseCase`, which has no HTTP entry point —
+so admin edits bypassed validation entirely.
+
+**Fix:** `AdminReportTypeSerializer.validate()` calls
+`reports.catalog.validation.validate_fields_schema(attrs["fields_schema"])` when the field is
+present (create or PATCH). Its `SchemaError` is a `DomainError`, so the existing unified
+exception handler renders a `400` with the stable code `INVALID_FIELDS_SCHEMA` — no bespoke
+error shaping needed.
+
+**Files changed:** `backend/reports/admin_api/serializers.py`, new
+`backend/reports/tests/test_admin_report_type_schema.py`. No migration. No frontend changes.
+
+**Verification (SQLite test settings):**
+- `python manage.py check` — 0 issues.
+- `pytest test_admin_report_type_schema.py` — 5 passed (rejects missing name, `select`
+  without options, and duplicate names; accepts a valid schema; create with a bad schema
+  returns 400 and persists nothing). Full suite: 95 passed, 4 failed (the same pre-existing
+  environmental media-mount `PermissionError`s, unrelated to B5).
+
+**Remaining:** B6 (exposing the template-version draft→active lifecycle and the DOCX
+upload-security scanner via the admin API) is still open and is a larger, feature-sized change.
 
 ## Verification performed
 - `npm run typecheck` (frontend, `tsc --noEmit`) — **passed** (exit 0).

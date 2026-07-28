@@ -3,6 +3,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from rest_framework import serializers
 
+from reports.catalog.validation import validate_fields_schema
 from reports.models import (
     AuditEvent,
     GeneratedReport,
@@ -158,3 +159,12 @@ class AdminReportTypeSerializer(serializers.ModelSerializer):
             "id", "name", "slug", "description", "template_file", "fields_schema",
             "is_active", "versions_count", "reports_count", "created_at", "updated_at",
         ]
+
+    def validate(self, attrs):
+        # The backend is the single source of truth for schema validity; reject
+        # malformed fields_schema (dup names, bad type, select without options, …)
+        # instead of persisting it via a generic create/PATCH. Raises a DomainError
+        # (INVALID_FIELDS_SCHEMA) handled by the unified error renderer.
+        if "fields_schema" in attrs:
+            validate_fields_schema(attrs["fields_schema"])
+        return attrs
