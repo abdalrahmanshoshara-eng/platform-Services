@@ -23,6 +23,14 @@ Base: `/api`. Auth via HttpOnly cookies; unsafe methods require `X-CSRFToken`.
 ## Dashboard
 - `GET /api/dashboard/stats/` → aggregated counts + latest reports.
 
+## Excel Contacts
+- `POST /api/tools/excel-contacts/process/` (authenticated multipart:
+  `file=.xlsx|.xls`, `countryCode`) → `200`
+  `{fileName,zipBase64,summary,sourceSheetName,previews}`.
+- The endpoint enforces the `whatsapp-contacts` service/category access policy, a
+  10 MiB upload limit, bounded workbook dimensions, signature validation, and records
+  `service.execute`; inputs and results are processed synchronously in memory and are not stored.
+
 ## Health
 - `GET /health/live` → `{status:"ok"}`. `GET /health/ready` → `200/503` + `{checks}`.
 

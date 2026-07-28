@@ -170,6 +170,7 @@ REST_FRAMEWORK = {
         "refresh": os.getenv("THROTTLE_REFRESH", "20/min"),
         "report_create": os.getenv("THROTTLE_REPORT_CREATE", "30/min"),
         "download": os.getenv("THROTTLE_DOWNLOAD", "120/min"),
+        "excel_contacts": os.getenv("THROTTLE_EXCEL_CONTACTS", "10/min"),
     },
 }
 

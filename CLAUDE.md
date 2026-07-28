@@ -14,7 +14,8 @@ and no `ServiceUsageEvent`. See `docs/CODEBASE_MAP.md` → "Deviations from requ
 
 ## Stack (verified from manifests)
 - Backend: Django 5.2, DRF 3.17, SimpleJWT 5.5, `psycopg` 3, Celery 5.6 + Redis, `docxtpl`
-  + LibreOffice (PDF). PostgreSQL. Single Django project `config`, single app `reports`.
+  + LibreOffice (PDF), and `openpyxl`/`xlrd` for Excel Contacts. PostgreSQL. Single
+  Django project `config`, single app `reports`.
 - Frontend: Next.js 16 (App Router) + React 19 + TypeScript 5.9 (strict), Vitest.
 - Orchestration: `docker-compose.yml` (db, redis, setup, backend[gunicorn], worker, frontend).
   Files are stored on a local `backend_media` volume via `FileField` — **no S3/MinIO**.
@@ -27,14 +28,15 @@ backend/reports/           models.py (all models), admin.py, urls.py
   catalog/                 ReportType + template versioning use cases, validation, security
   generation/              GeneratedReport: views→application→domain(state machine)→tasks
   services_catalog/        Service list/detail + launch endpoint + access policy
+  excel_contacts/          authenticated bounded Excel/VCF processing
   dashboard/               user dashboard stats (selectors)
   admin_api/               /api/v1/admin/* viewsets, admin permissions, analytics
   audit/                   AuditEvent writer
   services/                LibreOffice/PDF + report rendering (external boundary)
   shared/                  storage, permissions, errors, exception_handler, logging, correlation
 frontend/src/
-  app/                     App Router pages incl. app/admin/* and app/api/excel-contacts/*
-  features/, components/, shared/{api,auth,admin,errors}, lib/excel-contacts
+  app/                     App Router pages (no server-side tool processing routes)
+  features/, components/, shared/{api,auth,admin,errors}
 ```
 
 ## Architectural boundaries (layering)

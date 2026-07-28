@@ -36,6 +36,9 @@ Files are written to a local `backend_media` volume through Django `FileField`
 - **services_catalog/** — `ServiceViewSet` (list/detail + `launch` action) and
   `policy.py` (`service_access_for`) — the access decision engine.
 - **dashboard/** — user dashboard aggregates (`selectors.py`, DB-side `Count`).
+- **excel_contacts/** — authenticated synchronous Excel/VCF processing behind the
+  centralized service-access policy; validates signatures and bounded workbook limits,
+  returns an in-memory ZIP, and records `service.execute`.
 - **admin_api/** — `/api/v1/admin/*`: Users, Services, Jobs, Audit-logs, Report-types
   viewsets + Dashboard + Analytics; `permissions.py` (admin gate, last-admin protection).
 - **audit/** — `AuditEvent` writer (`service.py`, `actions.py`).
@@ -55,14 +58,10 @@ User: `/login`, `/register`, `/dashboard`, `/profile`, `/services`, `/report-typ
 `/reports`, `/reports/[id]`, `/reports/new`, `/tools/excel-contacts`.
 Admin (`/admin`): `analytics`, `audit-logs`, `categories`, `jobs`, `services`,
 `services/[id]`, `settings`, `users`, `users/[id]`.
-Server route: `app/api/excel-contacts/process/route.js` — a Next.js Node route that parses
-an uploaded Excel entirely in the frontend (bypasses Django; **no auth check**).
-
 Feature boundaries: `shared/api/client.ts` (fetch + CSRF + error normalization),
 `shared/auth/*` (session/user), `shared/admin/useAdminList.ts` (shared admin list/paginate),
-`features/*` (auth, dashboard, report-catalog, report-generation, reports-history),
-`lib/excel-contacts/*` (untyped JS). A deprecated `lib/{api,auth,useRequireAuth}` shim
-stack is still imported by several `reports` pages (mid-migration).
+`features/*` (auth, dashboard, report-catalog, report-generation, reports-history), and
+`features/excel-contacts/api.ts` (authenticated Django upload contract).
 
 ## Authentication flow
 ```mermaid
@@ -103,6 +102,14 @@ Open-redirect is mitigated at write time: `Service.clean()` requires external ta
 HTTPS and internal targets to start with `/`; users never supply the URL. Usage analytics
 are reconstructed from `AuditEvent` rows (there is no `ServiceUsageEvent` table).
 
+## Excel Contacts execution flow
+`POST /api/tools/excel-contacts/process/` authenticates via the normal cookie/CSRF
+boundary, then the focused use case resolves `whatsapp-contacts` and calls
+`service_access_for`. A size/signature/dimension-bounded synchronous processor reads the
+first worksheet, returns the existing ZIP/summary/preview shape, and records
+`service.execute`. No input/output is persisted because the platform has no generic
+Job/Asset model.
+
 ## Admin request flow
 `/api/v1/admin/*` viewsets are gated by an admin permission class (`admin_api/permissions.py`)
 enforced server-side. Sensitive mutations (activate/deactivate service, user activate/
@@ -122,7 +129,7 @@ expiry/retention job.
 - **LibreOffice** (subprocess) for DOCX→PDF, behind `services/pdf_converter.py`.
 - **docxtpl/python-docx** for template rendering.
 - **Redis/Celery** for async generation.
-- **exceljs/xlsx/jszip** (frontend) for the excel-contacts tool, processed in a Next route.
+- **openpyxl/xlrd/defusedxml** (backend) for bounded Excel Contacts parsing and output.
 
 ## Where implementation differs materially from the requirements
 - No **custom User model** — default `auth.User` + `UserAdministration` side-table.
@@ -134,5 +141,3 @@ expiry/retention job.
 - **Template versioning + DOCX security scanner exist but are unreachable via any API**
   (only unit-tested) — effectively dead code (backlog).
 - **API versioning is inconsistent** — admin is `/api/v1/`, auth/reports are `/api/`.
-- The **excel-contacts tool runs entirely in the Next.js frontend** (unauthenticated
-  server route), not through the Django backend/tool pipeline.

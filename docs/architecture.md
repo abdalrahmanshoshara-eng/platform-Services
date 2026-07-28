@@ -55,6 +55,7 @@ backend/
     ├── generation/         # reports: domain (state machine), application (use cases),
     │                       # tasks (celery), selectors, serializers, views
     ├── dashboard/          # read-only stats: selectors, views
+    ├── excel_contacts/     # bounded authenticated spreadsheet processing
     ├── audit/              # audit actions + recording service
     ├── services/           # report_generation, pdf_converter (generation infrastructure)
     ├── management/commands # seed_initial_data, seed_dev_data, recover_stuck_reports
@@ -73,6 +74,7 @@ frontend/src/
 │   ├── auth/               # useLogin
 │   ├── report-catalog/     # useReportTypes
 │   ├── report-generation/  # useCreateReport, useReportStatus (polling)
+│   ├── excel-contacts/     # authenticated processing API boundary
 │   ├── reports-history/    # useReports
 │   └── dashboard/          # useDashboard
 ├── shared/
@@ -130,6 +132,7 @@ so the worker never starts before the report row is committed.
 | `catalog` | Report types, `fields_schema` validation, template versions, placeholder + DOCX security validation, activation |
 | `generation` | Report creation use case, state machine, async generation task, retries, selectors, serializers, downloads |
 | `dashboard` | Read-only aggregated statistics |
+| `excel_contacts` | Authorized, bounded Excel contact normalization and in-memory result packaging |
 | `audit` | Recording + canonical names for security/admin events |
 | `shared` | Error model, correlation id, storage abstraction, permissions, logging |
 | `services` | Generation infrastructure: DOCX render (docxtpl), LibreOffice PDF conversion |
@@ -350,3 +353,13 @@ See the "Remaining technical debt" section of `final-refactor-report.md` and
 ## 36. ADRs
 
 See `docs/decisions/` — ADR-001…ADR-008.
+
+## 37. Excel Contacts processing flow
+
+`POST /api/tools/excel-contacts/process/` authenticates with the normal cookie/CSRF
+boundary, resolves the `whatsapp-contacts` service, and delegates authorization to
+`services_catalog.policy.service_access_for`. A focused use case validates the upload
+and invokes the bounded workbook processor. The synchronous response preserves the
+existing ZIP/summary/preview contract; no input or output is persisted because the
+verified platform has no generic Job or Asset model. Success, denial, and failure are
+recorded as `service.execute` audit events without workbook contents or contact data.

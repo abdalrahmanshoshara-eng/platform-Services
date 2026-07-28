@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  excelContactsErrorMessage,
+  processExcelContacts,
+} from "@/features/excel-contacts/api";
 
 const REQUIRED_COLUMNS = [
   "الاسم الكامل",
@@ -112,19 +116,7 @@ export default function ContactProcessor() {
     setError("");
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("countryCode", countryCode);
-
-      const response = await fetch("/api/excel-contacts/process", {
-        method: "POST",
-        body: formData,
-      });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.error || "تعذر معالجة الملف.");
-      }
+      const payload = await processExcelContacts(file, countryCode);
 
       if (downloadUrl) URL.revokeObjectURL(downloadUrl);
       const url = URL.createObjectURL(base64ToBlob(payload.zipBase64));
@@ -132,7 +124,7 @@ export default function ContactProcessor() {
       setResult(payload);
       setActiveTab("valid");
     } catch (processingError) {
-      setError(processingError.message || "حدث خطأ غير متوقع.");
+      setError(excelContactsErrorMessage(processingError));
       setResult(null);
     } finally {
       setIsProcessing(false);
