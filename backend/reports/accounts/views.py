@@ -13,7 +13,7 @@ from reports.audit.service import record
 from .authentication import CookieJWTAuthentication
 from .cookies import clear_auth_cookies, set_auth_cookies
 from .serializers import LoginSerializer, RegisterSerializer, UserSummarySerializer
-from .throttling import LoginRateThrottle, RefreshRateThrottle
+from .throttling import LoginRateThrottle, RefreshRateThrottle, RegisterRateThrottle
 
 
 def _issue(response, user):
@@ -48,6 +48,7 @@ class LoginView(APIView):
 class RegisterView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [RegisterRateThrottle]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)

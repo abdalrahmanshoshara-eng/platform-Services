@@ -91,7 +91,10 @@ class AdminServiceSerializer(serializers.ModelSerializer):
             "disabled_reason", "disabled_at", "settings", "restrictions_count", "launches_count",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["disabled_reason", "disabled_at", "created_at", "updated_at"]
+        # is_active is state, not a plain attribute: it must change only through
+        # the audited activate/deactivate actions (which set disabled_by/at and
+        # write an AuditEvent), never via a generic PATCH.
+        read_only_fields = ["is_active", "disabled_reason", "disabled_at", "created_at", "updated_at"]
 
     def validate(self, attrs):
         instance = self.instance or Service(**attrs)

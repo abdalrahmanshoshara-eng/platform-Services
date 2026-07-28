@@ -10,3 +10,7 @@ class LoginRateThrottle(SimpleRateThrottle):
 
 class RefreshRateThrottle(LoginRateThrottle):
     scope = "refresh"
+
+
+class RegisterRateThrottle(LoginRateThrottle):
+    scope = "register"
