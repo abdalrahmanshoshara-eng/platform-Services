@@ -363,18 +363,36 @@ class AdminAnalyticsView(APIView):
             .annotate(total=Count("id"), completed=Count("id", filter=Q(status="completed")), failed=Count("id", filter=Q(status="failed")))
             .order_by("day")
         )
+        # Aggregate once per metric instead of 3 queries per service (avoids N+1).
+        launch_counts: dict[str, dict[str, int]] = {}
+        for row in (
+            AuditEvent.objects.filter(
+                action="service.launch", target_type="Service", created_at__gte=since
+            )
+            .values("target_id", "outcome")
+            .annotate(count=Count("id"))
+        ):
+            launch_counts.setdefault(row["target_id"], {})[row["outcome"]] = row["count"]
+
+        restricted_counts: dict[int, int] = {
+            row["service_id"]: row["count"]
+            for row in (
+                UserServiceRestriction.objects.filter(
+                    Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+                )
+                .values("service_id")
+                .annotate(count=Count("id"))
+            )
+        }
+
         services = []
         for service in Service.objects.select_related("category"):
-            launches = AuditEvent.objects.filter(
-                action="service.launch", target_type="Service", target_id=str(service.id), created_at__gte=since
-            )
+            outcomes = launch_counts.get(str(service.id), {})
             services.append({
                 "id": service.id, "name": service.name, "category": service.category.name,
-                "launches": launches.filter(outcome="success").count(),
-                "denied": launches.filter(outcome="denied").count(),
-                "restricted_users": service.user_restrictions.filter(
-                    Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
-                ).count(),
+                "launches": outcomes.get("success", 0),
+                "denied": outcomes.get("denied", 0),
+                "restricted_users": restricted_counts.get(service.id, 0),
             })
         return Response({
             "period_days": days,
