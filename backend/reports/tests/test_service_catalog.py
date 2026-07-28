@@ -54,7 +54,7 @@ def test_register_and_login_with_email():
     client = APIClient()
     registered = client.post(
         "/api/auth/register/",
-        {"username": "new-user", "email": "new@example.com", "password": "secret123"},
+        {"username": "new-user", "email": "new@example.com", "password": "strongPa55phrase"},
         format="json",
     )
     assert registered.status_code == 201
@@ -62,7 +62,7 @@ def test_register_and_login_with_email():
     client.cookies.clear()
     logged_in = client.post(
         "/api/auth/login/",
-        {"username": "new@example.com", "password": "secret123"},
+        {"username": "new@example.com", "password": "strongPa55phrase"},
         format="json",
     )
     assert logged_in.status_code == 200
