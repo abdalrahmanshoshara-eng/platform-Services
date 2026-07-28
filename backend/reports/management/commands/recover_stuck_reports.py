@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from reports.generation.application import RetryReportUseCase
+from reports.generation.domain import transition
 from reports.models import GeneratedReport
 
 
@@ -20,9 +21,9 @@ class Command(BaseCommand):
         stuck = GeneratedReport.objects.filter(status=GeneratedReport.Status.PROCESSING, started_at__lt=threshold)
         count = 0
         for report in stuck:
-            # move processing -> failed first so the state machine allows requeue
-            report.status = GeneratedReport.Status.FAILED
-            report.save(update_fields=["status", "updated_at"])
+            # Move processing -> failed through the state machine (the single source of
+            # truth for transitions) so the subsequent retry is allowed to requeue it.
+            transition(report, GeneratedReport.Status.FAILED)
             RetryReportUseCase().execute(report=report)
             count += 1
         self.stdout.write(self.style.SUCCESS(f"Requeued {count} stuck report(s)."))
