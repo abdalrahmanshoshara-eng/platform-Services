@@ -36,7 +36,7 @@ export default function ProfilePage() {
         </article>
         <article>
           <span><BadgeCheck size={20} /></span>
-          <div><small>حالة الحساب</small><strong>نشط</strong></div>
+          <div><small>حالة الحساب</small><strong>{user?.is_active === false ? 'موقوف' : 'نشط'}</strong></div>
         </article>
       </section>
     </main>
