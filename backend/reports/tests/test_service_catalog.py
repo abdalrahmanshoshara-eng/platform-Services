@@ -5,6 +5,44 @@ from rest_framework.test import APIClient
 from reports.models import Service, ServiceCategory, UserServiceRestriction
 
 
+@pytest.fixture
+def public_service():
+    category = ServiceCategory.objects.create(
+        name="خدمات المستندات",
+        slug="documents",
+        description="أدوات إعداد المستندات.",
+    )
+    return Service.objects.create(
+        category=category,
+        name="منشئ التقارير",
+        slug="report-builder",
+        description="أنشئ تقريراً احترافياً.",
+        kind=Service.Kind.INTERNAL,
+        launch_target="/reports/new",
+    )
+
+
+@pytest.mark.django_db
+def test_service_catalog_is_public_but_marks_usage_as_requiring_login(public_service):
+    client = APIClient()
+    response = client.get("/api/v1/services/")
+    legacy_response = client.get("/api/services/")
+
+    assert response.status_code == legacy_response.status_code == 200
+    assert response.data == legacy_response.data
+    assert response.data[0]["slug"] == public_service.slug
+    assert response.data[0]["is_available"] is False
+    assert response.data[0]["restriction_reason"] == "سجّل الدخول لاستخدام هذه الخدمة."
+
+
+@pytest.mark.django_db
+def test_anonymous_user_cannot_launch_publicly_listed_service(public_service):
+    response = APIClient().post(f"/api/v1/services/{public_service.slug}/launch/")
+
+    assert response.status_code == 401
+    assert response.data["code"] == "NOT_AUTHENTICATED"
+
+
 @pytest.mark.django_db
 def test_service_catalog_marks_user_restrictions():
     user = get_user_model().objects.create_user(username="catalog-user", password="secret123")

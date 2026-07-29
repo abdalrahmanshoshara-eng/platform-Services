@@ -15,6 +15,7 @@ class AccessDecision:
 
 # Stable, UI/language-independent reason codes.
 CODE_ALLOWED = "ALLOWED"
+CODE_AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
 CODE_ACCOUNT_DISABLED = "ACCOUNT_DISABLED"
 CODE_SERVICE_DISABLED = "SERVICE_DISABLED"
 CODE_STAFF_ONLY = "STAFF_ONLY"
@@ -56,8 +57,10 @@ def access_decisions_for(user, services) -> dict:
     are never deleted here.
     """
     services = list(services)
-    account_disabled = not getattr(user, "is_authenticated", False) or not user.is_active
-    if account_disabled:
+    if not getattr(user, "is_authenticated", False):
+        reason = "سجّل الدخول لاستخدام هذه الخدمة."
+        return {s.pk: AccessDecision(False, reason, CODE_AUTHENTICATION_REQUIRED) for s in services}
+    if not user.is_active:
         reason = "حسابك معطّل حالياً."
         return {s.pk: AccessDecision(False, reason, CODE_ACCOUNT_DISABLED) for s in services}
     if not services:

@@ -27,6 +27,14 @@ not API-versioned.
 ## Dashboard
 - `GET /api/v1/dashboard/stats/` → aggregated counts + latest reports.
 
+## Services
+- `GET /api/v1/services/` and `GET /api/v1/services/{slug}/` are public catalog reads.
+  Anonymous responses preserve the normal service shape with `is_available: false` and
+  a sign-in prompt in `restriction_reason`; authenticated responses apply the account,
+  staff, service, and category access policy.
+- `POST /api/v1/services/{slug}/launch/` remains authenticated. It applies the centralized
+  access policy, records the launch audit event, and returns `{target,kind}` only when allowed.
+
 ## Admin template versions
 All endpoints require a platform administrator and live below `/api/v1/admin`.
 

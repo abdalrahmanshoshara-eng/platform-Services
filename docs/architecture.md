@@ -108,6 +108,12 @@ user model stable. Restrictions support an optional expiry and are ignored by th
 service access policy after expiry. Sensitive state changes require a reason and write
 an append-only `AuditEvent`.
 
+The public landing page and service catalog are available without authentication.
+`GET /api/v1/services/` and service detail reads expose active catalog metadata to
+anonymous visitors, while launch and execution endpoints remain authenticated and
+continue to use the centralized service-access policy. Anonymous catalog responses mark
+services as requiring sign-in; they never expose a launch target.
+
 ## 7. PostgreSQL
 
 Default database in development, tests, and CI. Connection from `DATABASE_URL` or

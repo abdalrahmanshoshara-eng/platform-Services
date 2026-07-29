@@ -1,5 +1,6 @@
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
@@ -14,6 +15,11 @@ class ServiceViewSet(ReadOnlyModelViewSet):
     serializer_class = ServiceSerializer
     pagination_class = None
     lookup_field = "slug"
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def get_queryset(self):
         # Access decisions are computed in a constant number of user-scoped

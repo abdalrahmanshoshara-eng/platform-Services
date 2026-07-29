@@ -33,8 +33,8 @@ Files are written to a local `backend_media` volume through Django `FileField`
 - **generation/** — core flow. `views.py` (create=202, list, retry, download) →
   `application.py` use cases → `domain.py` state machine → `tasks.py` (Celery). Ownership
   filtered in `selectors.reports_for`; object-level `IsOwnerOrAdmin`.
-- **services_catalog/** — `ServiceViewSet` (list/detail + `launch` action) and
-  `policy.py` (`service_access_for`) — the access decision engine.
+- **services_catalog/** — `ServiceViewSet` (public list/detail + authenticated `launch`
+  action) and `policy.py` (`service_access_for`) — the access decision engine.
 - **dashboard/** — user dashboard aggregates (`selectors.py`, DB-side `Count`).
 - **excel_contacts/** — authenticated synchronous Excel/VCF processing behind the
   centralized service-access policy; validates signatures and bounded workbook limits,
@@ -55,8 +55,9 @@ consumes `models` + `audit` + `catalog`/`generation` selectors. `shared` is leaf
 No custom-user override; all modules reference `settings.AUTH_USER_MODEL` (= `auth.User`).
 
 ## Frontend routes & feature boundaries (`frontend/src/app`)
-User: `/login`, `/register`, `/dashboard`, `/profile`, `/services`, `/report-types`,
-`/reports`, `/reports/[id]`, `/reports/new`, `/tools/excel-contacts`.
+Public: `/` and `/services` (platform introduction + API-backed catalog), `/login`,
+`/register`. User: `/dashboard`, `/profile`, `/report-types`, `/reports`,
+`/reports/[id]`, `/reports/new`, `/tools/excel-contacts`.
 Admin (`/admin`): `analytics`, `audit-logs`, `categories`, `jobs`, `services`,
 `services/[id]`, `settings`, `users`, `users/[id]`.
 Feature boundaries: `shared/api/client.ts` (fetch + CSRF + error normalization),
@@ -97,6 +98,8 @@ State machine (`domain.py ALLOWED_TRANSITIONS`) is the only place transitions oc
 There is no generic Job/Asset model — job fields live on `GeneratedReport`.
 
 ## External-service launch flow
+Catalog reads (`GET /api/v1/services/` and detail) are public and expose active service
+metadata without `launch_target`. Anonymous entries are marked as requiring sign-in.
 `POST /api/v1/services/{slug}/launch/` → checks access via `service_access_for` → writes an
 `AuditEvent` `service.launch` → returns `{target, kind}`. Frontend performs the redirect.
 Open-redirect is mitigated at write time: `Service.clean()` requires external targets to be
