@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/shared/auth/AuthContext';
+import { adminGate } from '@/shared/auth/adminGate';
 import AdminSidebar from './AdminSidebar';
 import AdminTopBar from './AdminTopBar';
 
@@ -11,13 +12,14 @@ export default function AdminChrome({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    if (loading) return;
-    if (!user) router.replace('/login');
-    else if (!user.is_staff && !user.is_superuser) router.replace('/dashboard');
-  }, [loading, user, router]);
+  const gate = adminGate(user, loading);
 
-  if (loading || !user || (!user.is_staff && !user.is_superuser)) {
+  useEffect(() => {
+    if (gate === 'redirect-login') router.replace('/login');
+    else if (gate === 'redirect-dashboard') router.replace('/dashboard');
+  }, [gate, router]);
+
+  if (gate !== 'allowed') {
     return <main className="page-loading">جارٍ التحقق من صلاحيات الإدارة...</main>;
   }
 
