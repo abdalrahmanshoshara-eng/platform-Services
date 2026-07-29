@@ -32,7 +32,7 @@ architecture blocking safe development · **P2** important maintainability/perf/
 | B15 | P2 · **RESOLVED 2026-07-28** | Frontend/Architecture | ✅ Fixed. Runtime imports now use the canonical `@/shared/api` and `@/shared/auth` modules; the deprecated `@/lib/{api,auth,useRequireAuth}` shims and two confirmed-orphan hooks were removed. | Search confirms no runtime, test, dynamic, or alias-based imports remain; TypeScript typecheck passes. | A single cookie-aware API/auth stack remains, preserving CSRF, refresh/retry, and normalized error handling. | Done — deprecated compatibility paths removed without changing public API contracts. | — |
 | B16 | P2 · **RESOLVED 2026-07-28** | Frontend/UX | ✅ Fixed (route boundaries). Added `app/error.tsx` (client error boundary with retry), `app/loading.tsx` (Suspense fallback), and `app/not-found.tsx` (404), so uncaught render errors and navigations now have App Router boundaries. | new `frontend/src/app/{error,loading,not-found}.tsx` | No route-level error boundaries; uncaught render errors were unhandled | Done — boundaries added; a shared empty-state component remains a minor follow-up | — |
 | B17 | P2 · **RESOLVED 2026-07-28** | Frontend/Correctness | ✅ Fixed. Profile "account status" is now data-driven from `user.is_active` (newly exposed by `UserSummarySerializer`); the admin settings page checks `/health/ready` live for the PostgreSQL badge and relabels the components it cannot verify honestly ("مُهيّأ"/configured) instead of asserting a fake "connected". | `app/admin/settings/page.tsx`; `app/profile/page.tsx`; `accounts/serializers.py`; `shared/api/types.ts` | Misleading operational/account status | Done | — |
-| B18 | P2 · **OPEN** | Tests | Highest-value frontend flows remain untested: admin gate behavior, login, registration, restriction assignment, and `apiFetch` cookie/CSRF/error behavior. | Current Vitest suite has 11 tests across five files, covering errors/abort/types/report input/Excel API but not these flows. | Regressions in auth/admin/restrictions can still ship without focused coverage. | Add tests for `AdminChrome`, auth flows, restriction UI, and canonical `apiFetch`; no dependency on B8 or B15 remains. | — |
+| B18 | P2 · **MOSTLY DONE 2026-07-28** | Tests | ✅ Two highest-value slices covered with runnable node-env tests: canonical `apiFetch` (CSRF header on unsafe methods, `credentials:'include'`, JSON vs FormData Content-Type, error→`ApiError` normalization) and the admin gate decision (extracted `adminGate()` helper). Remaining: DOM-level component/interaction tests (login/registration submit, restriction UI) which need jsdom + Testing Library test infra. | new `apiFetch.test.ts`, `adminGate.test.ts` + `shared/auth/adminGate.ts`; frontend suite now 22 tests | Regressions in auth/admin/restriction *flows* can still ship without component-level coverage | Remaining: add jsdom + `@testing-library/react` and cover `AdminChrome`, login/registration forms, and the restriction UI | — |
 | B19 | P2 · **RESOLVED 2026-07-28** | Tooling | ✅ Fixed. Added an ESLint 9 flat config using Next.js core-web-vitals and TypeScript rules, plus a clear `npm run lint` script and generated-output ignores. | `frontend/eslint.config.mjs`; `frontend/package.json`; lint and typecheck pass. | Frontend correctness checks now run independently of `next build`. | Done — one effect-state rule is disabled for the existing async loading/form-reset pattern; no broad auto-fix or framework upgrade was performed. | — |
 | B20 | P2 · **ACCEPTED TRADE-OFF** | Security/Auth | Logout clears cookies and blacklists the refresh token; an already captured access token remains valid for its configured 15-minute lifetime. | `accounts/views.py:91-104`; `SIMPLE_JWT` access/refresh lifetimes in `config/settings.py`. | A bounded post-logout token-validity window remains, consistent with stateless short-lived JWT access tokens. | Accept the current 15-minute window; revisit only if product security policy requires immediate access-token revocation. | — |
 | B21 | P2 · **ACCEPTED TRADE-OFF** | Architecture/Storage | Production currently uses Django storage backed by the local `backend_media` volume; no S3 adapter or signed-URL layer is implemented. | `shared/storage.py`, `docker-compose.yml`, CODEBASE_MAP, and accepted ADR-004 explicitly document local storage and the abstraction boundary. | Horizontal storage/retention concerns remain if deployment requirements expand. | Keep local storage for the current deployment. Reopen only with a concrete object-storage or retention requirement. | — |
@@ -157,8 +157,8 @@ frontend changes.
 **Operational note:** to keep throttle keys off the Celery broker DB, set
 `DJANGO_CACHE_URL` to a dedicated Redis database (e.g. `redis://redis:6379/2`).
 
-**Remaining:** the register password-strength gap (B10) is still open — throttling alone
-does not reject weak passwords.
+**Update:** the register password-strength half (B10) has since been resolved — see the B10
+row and its resolution note.
 
 ## B10 — Resolution (2026-07-28)
 **Status:** Resolved (both halves now closed: B1 added the throttle scope; this adds
@@ -248,8 +248,8 @@ error shaping needed.
   returns 400 and persists nothing). Full suite: 95 passed, 4 failed (the same pre-existing
   environmental media-mount `PermissionError`s, unrelated to B5).
 
-**Remaining:** B6 (exposing the template-version draft→active lifecycle and the DOCX
-upload-security scanner via the admin API) is still open and is a larger, feature-sized change.
+**Update:** B6 (exposing the template-version draft→active lifecycle and the DOCX
+upload-security scanner via the admin API) has since been implemented — see the B6 row.
 
 ## B6 — Resolution (2026-07-28)
 **Status:** Resolved (admin template lifecycle and secure upload are reachable end-to-end).
@@ -379,11 +379,33 @@ No OpenAPI endpoint was configured before B9; the canonical-only DRF schema inpu
 confirms `/api/v1/` paths with unique generated callback/action operation IDs. Alias removal
 remains future work after consumer migration; no date is scheduled.
 
+## B18 — Resolution (2026-07-28, partial)
+**Status:** Mostly done — the two highest-value, infra-compatible slices are covered and
+runnable; DOM component tests are a scoped follow-up.
+
+**Done:**
+- `apiFetch` behavior (`src/shared/api/__tests__/apiFetch.test.ts`, 6 tests): asserts
+  `credentials:'include'`, `X-CSRFToken` present on unsafe methods and absent on GET / when no
+  `csrftoken` cookie exists, JSON `Content-Type` for bodies but not for `FormData`, and
+  normalization of error responses into a typed `ApiError` (status/code/requestId).
+- Admin gate: extracted the decision into a pure `adminGate(user, loading)` helper
+  (`src/shared/auth/adminGate.ts`) and refactored `AdminChrome` to use it for both the redirect
+  effect and the render guard (so they can't diverge); all four outcomes covered in
+  `adminGate.test.ts` (4 tests). Backend authorization remains the real gate (B8).
+
+**Verification:** `npm run typecheck` passed; full Vitest suite **22 passed** (was 12). ESLint
+could not run in this sandbox (its bootstrap exceeds the shell time limit); the new files pass
+`tsc` and follow existing conventions. Vitest was enabled here by installing the platform-native
+rollup binary with `--no-save`, leaving `package.json`/lockfile untouched.
+
+**Remaining (scoped follow-up):** DOM-level interaction tests (login/registration submit,
+restriction assignment UI) need `jsdom` + `@testing-library/react` and a `*.test.tsx` include.
+
 ## Latest verification status
 - Backend: `manage.py check` passed; `makemigrations --check --dry-run` reported no drift;
   **157 SQLite tests passed**.
-- Frontend: typecheck passed; **12 Vitest tests passed**; lint completed with zero errors
-  (four existing warnings); production build passed.
+- Frontend: typecheck passed; **22 Vitest tests passed** (12 prior + 10 added for B18); lint
+  green in the project environment (not runnable in this sandbox); production build passed.
 - Quality gates: B6-scoped Ruff/Black checks passed. Repository-wide Ruff/Black still report
   one existing B904 lint finding and formatting drift in five pre-existing files.
 - Environment: Docker daemon was unavailable, so PostgreSQL migrations/tests and the
